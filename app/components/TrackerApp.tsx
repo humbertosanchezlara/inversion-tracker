@@ -167,6 +167,16 @@ export default function TrackerApp() {
   const latestAnalysis = analyses[0];
   const missingManualConfig = !activeSnapshot;
   const userId = session?.user.id;
+  const curveQuotes = useMemo(() => {
+    return (activeSnapshot?.quotes ?? [])
+      .slice()
+      .sort((a, b) => {
+        const instrumentOrder = ["CETES", "BONOS", "UDIBONOS", "BONDDIA"];
+        const instrumentDiff = instrumentOrder.indexOf(a.instrument) - instrumentOrder.indexOf(b.instrument);
+        if (instrumentDiff !== 0) return instrumentDiff;
+        return (a.termYears ?? 0) - (b.termYears ?? 0);
+      });
+  }, [activeSnapshot]);
   const allocationByInstrument = useMemo(() => {
     return lots.reduce<Record<string, number>>((acc, lot) => {
       acc[lot.instrument] = (acc[lot.instrument] ?? 0) + lot.amount;
@@ -485,6 +495,42 @@ export default function TrackerApp() {
         <Metric title="Lotes registrados" value={String(lots.length)} />
         <Metric title="Tasa BONOS" value={formatPercent(quote(activeSnapshot, "BONOS")?.annualRate)} />
         <Metric title="Tasa UDIBONOS" value={formatPercent(quote(activeSnapshot, "UDIBONOS")?.annualRate)} />
+      </section>
+
+      <section className="overflow-hidden rounded-md border border-[var(--line)] bg-white">
+        <div className="border-b border-[var(--line)] px-4 py-3">
+          <h2 className="text-lg font-semibold">Curva disponible por instrumento</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="bg-[#eef2ef] text-left">
+              <tr>
+                <th className="px-4 py-3">Instrumento</th>
+                <th className="px-4 py-3">Plazo</th>
+                <th className="px-4 py-3">Tasa anual</th>
+                <th className="px-4 py-3">Fuente</th>
+              </tr>
+            </thead>
+            <tbody>
+              {curveQuotes.length > 0 ? (
+                curveQuotes.map((item) => (
+                  <tr className="border-t border-[var(--line)]" key={`${item.instrument}-${item.termLabel ?? item.termYears ?? item.source}`}>
+                    <td className="px-4 py-3 font-semibold">{item.instrument}</td>
+                    <td className="px-4 py-3">{item.termLabel ?? (item.termYears ? `${item.termYears} años` : "N/D")}</td>
+                    <td className="px-4 py-3">{formatPercent(item.annualRate)}</td>
+                    <td className="px-4 py-3 text-[var(--muted)]">{item.source}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="px-4 py-6 text-[var(--muted)]" colSpan={4}>
+                    Actualiza fuentes o captura tasas manuales para ver la curva disponible.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[360px_1fr]">
