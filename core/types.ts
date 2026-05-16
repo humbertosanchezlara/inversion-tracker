@@ -34,6 +34,7 @@ export type MarketInstrumentQuote = {
   instrument: InstrumentType;
   annualRate: number;
   termYears?: number;
+  termLabel?: string;
   source: string;
   sourceUrl?: string;
 };
@@ -96,5 +97,10 @@ export type MonthlyAnalysis = {
   rationale: string[];
   risks: string[];
   dataUsed: string[];
+  macroSummary?: string[];
+  curveSummary?: string[];
+  portfolioSummary?: string[];
+  actionItems?: string[];
+  watchConditions?: string[];
   notFinancialAdvice: true;
 };

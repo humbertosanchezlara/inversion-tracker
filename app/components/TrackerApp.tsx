@@ -31,7 +31,8 @@ function newId() {
 }
 
 function quote(snapshot: MarketSnapshot | undefined, instrument: InvestmentLot["instrument"]) {
-  return snapshot?.quotes.find((item) => item.instrument === instrument);
+  return snapshot?.quotes.find((item) => item.instrument === instrument && item.termYears === 10)
+    ?? snapshot?.quotes.find((item) => item.instrument === instrument);
 }
 
 function latestUsableSnapshot(snapshots: MarketSnapshot[]) {
@@ -166,6 +167,12 @@ export default function TrackerApp() {
   const latestAnalysis = analyses[0];
   const missingManualConfig = !activeSnapshot;
   const userId = session?.user.id;
+  const allocationByInstrument = useMemo(() => {
+    return lots.reduce<Record<string, number>>((acc, lot) => {
+      acc[lot.instrument] = (acc[lot.instrument] ?? 0) + lot.amount;
+      return acc;
+    }, {});
+  }, [lots]);
 
   async function refreshMarketData() {
     if (!userId) return;
@@ -344,6 +351,18 @@ export default function TrackerApp() {
           month,
           marketSnapshot: activeSnapshot,
           currentAllocation: { UDIBONOS: 60, BONOS: 40 },
+          portfolio: {
+            lots,
+            taxRecords,
+            totalInvested,
+            currentAllocation: allocationByInstrument,
+            upcomingMaturities: nextMaturities.map((lot) => ({
+              instrument: lot.instrument,
+              amount: lot.amount,
+              maturityDate: lot.maturityDate,
+              annualRate: lot.annualRate,
+            })),
+          },
         }),
       });
       const payload = await response.json().catch(() => ({
@@ -610,6 +629,15 @@ export default function TrackerApp() {
                   <li key={item}>{item}</li>
                 ))}
               </ul>
+              {latestAnalysis.macroSummary ? <AnalysisList title="Macro" items={latestAnalysis.macroSummary} /> : null}
+              {latestAnalysis.curveSummary ? <AnalysisList title="Curva" items={latestAnalysis.curveSummary} /> : null}
+              {latestAnalysis.portfolioSummary ? (
+                <AnalysisList title="Cartera" items={latestAnalysis.portfolioSummary} />
+              ) : null}
+              {latestAnalysis.actionItems ? <AnalysisList title="Acciones" items={latestAnalysis.actionItems} /> : null}
+              {latestAnalysis.watchConditions ? (
+                <AnalysisList title="Vigilar" items={latestAnalysis.watchConditions} />
+              ) : null}
               <p className="text-xs text-[var(--warning)]">Sugerencia informativa. No es asesoría financiera.</p>
             </div>
           ) : (
@@ -829,6 +857,19 @@ function MiniMetric({ title, value }: { title: string; value: string }) {
     <div className="rounded-md border border-[var(--line)] p-2">
       <p className="text-xs text-[var(--muted)]">{title}</p>
       <p className="mt-1 text-sm font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function AnalysisList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <p className="mb-1 text-xs font-semibold uppercase text-[var(--accent)]">{title}</p>
+      <ul className="list-disc space-y-1 pl-5 text-[var(--muted)]">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }

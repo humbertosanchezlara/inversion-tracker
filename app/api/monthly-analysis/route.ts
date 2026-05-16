@@ -1,11 +1,23 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { randomUUID } from "node:crypto";
-import type { MarketSnapshot, MonthlyAnalysis } from "@/core/types";
+import type { InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
 
 type Body = {
   month: string;
   marketSnapshot: MarketSnapshot;
+  portfolio?: {
+    lots: InvestmentLot[];
+    taxRecords: TaxDeclarationRecord[];
+    totalInvested: number;
+    currentAllocation: Record<string, number>;
+    upcomingMaturities: Array<{
+      instrument: string;
+      amount: number;
+      maturityDate: string;
+      annualRate: number;
+    }>;
+  };
   currentAllocation?: {
     BONOS: number;
     UDIBONOS: number;
@@ -25,6 +37,11 @@ const schema = {
       "rationale",
       "risks",
       "dataUsed",
+      "macroSummary",
+      "curveSummary",
+      "portfolioSummary",
+      "actionItems",
+      "watchConditions",
       "notFinancialAdvice",
     ],
     properties: {
@@ -47,6 +64,11 @@ const schema = {
       rationale: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 5 },
       risks: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
       dataUsed: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 8 },
+      macroSummary: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 6 },
+      curveSummary: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 6 },
+      portfolioSummary: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 6 },
+      actionItems: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
+      watchConditions: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5 },
       notFinancialAdvice: { type: "boolean", const: true },
     },
   },
@@ -92,10 +114,11 @@ export async function POST(request: Request) {
           role: "user",
           content: JSON.stringify({
             task:
-              "Analiza si este mes conviene mantener 60% UDIBONOS / 40% BONOS, ajustar porcentajes, o considerar CETES/BONDDIA. Devuelve solo el JSON del schema.",
+              "Haz un análisis mensual integral: curva de tasas por plazos, inflación, condiciones macro de México/mundo inferibles de tasas/FX/inflación disponibles, y cartera acumulada. La base es 60% UDIBONOS / 40% BONOS, pero puedes recomendar un split distinto dentro de BONOS, UDIBONOS, CETES y BONDDIA. Devuelve solo el JSON del schema.",
             month: body.month,
             currentAllocation: body.currentAllocation ?? { UDIBONOS: 60, BONOS: 40 },
             marketSnapshot: body.marketSnapshot,
+            portfolio: body.portfolio,
           }),
         },
       ],

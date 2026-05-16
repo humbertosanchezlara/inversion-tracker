@@ -15,8 +15,23 @@ type BanxicoSeriesResponse = {
 
 const BANXICO_SERIES = {
   CETES_28: "SF43936",
+  CETES_91: "SF43939",
+  CETES_182: "SF43942",
+  CETES_364: "SF43945",
+  CETES_728: "SF349785",
+  BONOS_3: "SF43883",
+  BONOS_5: "SF43886",
+  BONOS_7: "SF44946",
   BONOS_10: "SF44071",
+  BONOS_20: "SF45384",
+  BONOS_30: "SF60696",
+  UDIBONOS_3: "SF61592",
+  UDIBONOS_5: "SF43927",
   UDIBONOS_10: "SF43924",
+  UDIBONOS_20: "SF46958",
+  UDIBONOS_30: "SF46961",
+  POLICY_RATE: "SF61745",
+  TIIE_28: "SF43783",
   INPC: "SP1",
 };
 
@@ -67,6 +82,7 @@ async function fetchRateQuote(
   seriesId: string,
   instrument: MarketInstrumentQuote["instrument"],
   termYears: number | undefined,
+  termLabel: string,
 ): Promise<MarketInstrumentQuote | undefined> {
   const payload = await fetchSeries(seriesId);
   const data = latestData(payload);
@@ -78,6 +94,7 @@ async function fetchRateQuote(
     instrument,
     annualRate: rate / 100,
     ...(termYears ? { termYears } : {}),
+    termLabel,
     source: `Banxico SIE ${seriesId}`,
     sourceUrl: "https://www.banxico.org.mx/SieInternet/",
   } satisfies MarketInstrumentQuote;
@@ -86,9 +103,24 @@ async function fetchRateQuote(
 export async function fetchBanxicoMarketData() {
   const notes: string[] = [];
   const quoteResults = await Promise.allSettled([
-    fetchRateQuote(BANXICO_SERIES.BONOS_10, "BONOS", 10),
-    fetchRateQuote(BANXICO_SERIES.UDIBONOS_10, "UDIBONOS", 10),
-    fetchRateQuote(BANXICO_SERIES.CETES_28, "CETES", undefined),
+    fetchRateQuote(BANXICO_SERIES.CETES_28, "CETES", undefined, "28 días"),
+    fetchRateQuote(BANXICO_SERIES.CETES_91, "CETES", undefined, "91 días"),
+    fetchRateQuote(BANXICO_SERIES.CETES_182, "CETES", undefined, "182 días"),
+    fetchRateQuote(BANXICO_SERIES.CETES_364, "CETES", 1, "364 días"),
+    fetchRateQuote(BANXICO_SERIES.CETES_728, "CETES", 2, "728 días"),
+    fetchRateQuote(BANXICO_SERIES.BONOS_3, "BONOS", 3, "3 años"),
+    fetchRateQuote(BANXICO_SERIES.BONOS_5, "BONOS", 5, "5 años"),
+    fetchRateQuote(BANXICO_SERIES.BONOS_7, "BONOS", 7, "7 años"),
+    fetchRateQuote(BANXICO_SERIES.BONOS_10, "BONOS", 10, "10 años"),
+    fetchRateQuote(BANXICO_SERIES.BONOS_20, "BONOS", 20, "20 años"),
+    fetchRateQuote(BANXICO_SERIES.BONOS_30, "BONOS", 30, "30 años"),
+    fetchRateQuote(BANXICO_SERIES.UDIBONOS_3, "UDIBONOS", 3, "3 años"),
+    fetchRateQuote(BANXICO_SERIES.UDIBONOS_5, "UDIBONOS", 5, "5 años"),
+    fetchRateQuote(BANXICO_SERIES.UDIBONOS_10, "UDIBONOS", 10, "10 años"),
+    fetchRateQuote(BANXICO_SERIES.UDIBONOS_20, "UDIBONOS", 20, "20 años"),
+    fetchRateQuote(BANXICO_SERIES.UDIBONOS_30, "UDIBONOS", 30, "30 años"),
+    fetchRateQuote(BANXICO_SERIES.POLICY_RATE, "BONDDIA", undefined, "tasa objetivo"),
+    fetchRateQuote(BANXICO_SERIES.TIIE_28, "BONDDIA", undefined, "TIIE 28 días"),
   ]);
 
   const quotes: MarketInstrumentQuote[] = quoteResults
