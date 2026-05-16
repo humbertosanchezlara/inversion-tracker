@@ -73,6 +73,7 @@ export default function TrackerApp() {
   const [manualProvisionalWithholdingRate, setManualProvisionalWithholdingRate] = useState("0.90");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
 
   const hydrateSettingsForm = useCallback((nextSettings: AppSettings | undefined) => {
     setManualBonosRate(
@@ -290,14 +291,29 @@ export default function TrackerApp() {
   }
 
   async function runMonthlyAnalysis() {
-    if (!userId) return;
+    if (!userId) {
+      setAnalysisMessage("Primero inicia sesión para guardar el análisis.");
+      return;
+    }
     if (!activeSnapshot) {
-      setMessage("Faltan datos automáticos para analizar el mes.");
+      const text = "Faltan tasas/inflación. Actualiza fuentes o llena Configuración manual.";
+      setMessage(text);
+      setAnalysisMessage(text);
+      return;
+    }
+
+    const hasBonos = activeSnapshot.quotes.some((item) => item.instrument === "BONOS");
+    const hasUdibonos = activeSnapshot.quotes.some((item) => item.instrument === "UDIBONOS");
+    if (!hasBonos || !hasUdibonos || typeof activeSnapshot.inflationAnnual !== "number") {
+      const text = "El análisis necesita BONOS, UDIBONOS e inflación. Completa esos valores en Configuración manual.";
+      setMessage(text);
+      setAnalysisMessage(text);
       return;
     }
 
     setBusy("analysis");
     setMessage(null);
+    setAnalysisMessage(null);
     try {
       const response = await fetch("/api/monthly-analysis", {
         method: "POST",
@@ -308,14 +324,23 @@ export default function TrackerApp() {
           currentAllocation: { UDIBONOS: 60, BONOS: 40 },
         }),
       });
-      const payload = await response.json();
+      const payload = await response.json().catch(() => ({
+        error: "El servidor no devolvió un error legible. Revisa variables de entorno en Vercel.",
+      }));
       if (!response.ok) {
-        setMessage(payload.error ?? "No se pudo generar el análisis.");
+        const text = payload.error ?? "No se pudo generar el análisis.";
+        setMessage(text);
+        setAnalysisMessage(text);
         return;
       }
       await saveMonthlyAnalysis(userId, payload as MonthlyAnalysis);
       setMessage("Análisis mensual generado y guardado.");
+      setAnalysisMessage("Análisis mensual generado y guardado.");
       await loadData(userId);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "No se pudo contactar el endpoint de análisis.";
+      setMessage(text);
+      setAnalysisMessage(text);
     } finally {
       setBusy(null);
     }
@@ -537,6 +562,12 @@ export default function TrackerApp() {
             <Brain size={16} />
             {busy === "analysis" ? "Analizando" : "Analizar con OpenAI"}
           </button>
+
+          {analysisMessage ? (
+            <div className="mt-3 rounded-md border border-[#e7c46b] bg-[#fff8e6] p-3 text-sm leading-6 text-[#6f4a00]">
+              {analysisMessage}
+            </div>
+          ) : null}
 
           {latestAnalysis ? (
             <div className="mt-4 space-y-3 text-sm">
