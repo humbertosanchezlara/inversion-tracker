@@ -78,6 +78,14 @@ alter table public.monthly_analyses enable row level security;
 alter table public.tax_declaration_records enable row level security;
 alter table public.app_settings enable row level security;
 
+grant usage on schema public to anon, authenticated;
+
+grant select, insert, update, delete on public.investment_lots to authenticated;
+grant select, insert, update, delete on public.market_snapshots to authenticated;
+grant select, insert, update, delete on public.monthly_analyses to authenticated;
+grant select, insert, update, delete on public.tax_declaration_records to authenticated;
+grant select, insert, update, delete on public.app_settings to authenticated;
+
 create policy "Users manage own investment lots"
   on public.investment_lots
   for all

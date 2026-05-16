@@ -50,6 +50,14 @@ function normalizeLot(lot: InvestmentLot): InvestmentLot {
   };
 }
 
+function readableError(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error && "message" in error) {
+    return String((error as { message?: unknown }).message);
+  }
+  return "Error desconocido.";
+}
+
 export default function TrackerApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState("");
@@ -173,6 +181,8 @@ export default function TrackerApp() {
           : "Fuentes actualizadas y guardadas.",
       );
       await loadData(userId);
+    } catch (error) {
+      setMessage(`No se pudieron guardar las fuentes en Supabase: ${readableError(error)}`);
     } finally {
       setBusy(null);
     }
@@ -237,9 +247,13 @@ export default function TrackerApp() {
     ];
     const nextLots = candidateLots.filter((lot) => lot.amount > 0);
 
-    await saveInvestmentLots(userId, nextLots);
-    setMessage("Inversión mensual guardada como lotes independientes.");
-    await loadData(userId);
+    try {
+      await saveInvestmentLots(userId, nextLots);
+      setMessage("Inversión mensual guardada como lotes independientes.");
+      await loadData(userId);
+    } catch (error) {
+      setMessage(`No se pudo guardar la inversión en Supabase: ${readableError(error)}`);
+    }
   }
 
   async function saveSettings() {
@@ -253,9 +267,13 @@ export default function TrackerApp() {
       manualProvisionalWithholdingRate: Number(manualProvisionalWithholdingRate) / 100 || undefined,
     };
 
-    await saveAppSettings(userId, nextSettings);
-    setSettings(nextSettings);
-    setMessage("Configuración manual actualizada.");
+    try {
+      await saveAppSettings(userId, nextSettings);
+      setSettings(nextSettings);
+      setMessage("Configuración manual actualizada.");
+    } catch (error) {
+      setMessage(`No se pudo guardar la configuración en Supabase: ${readableError(error)}`);
+    }
   }
 
   async function saveTaxRecord() {
@@ -281,13 +299,17 @@ export default function TrackerApp() {
       updatedAt: now,
     };
 
-    await saveTaxDeclarationRecord(userId, record);
-    setNominalInterest("");
-    setRealInterest("");
-    setIsrWithheld("");
-    setTaxNotes("");
-    setMessage("Registro fiscal guardado para declaración anual.");
-    await loadData(userId);
+    try {
+      await saveTaxDeclarationRecord(userId, record);
+      setNominalInterest("");
+      setRealInterest("");
+      setIsrWithheld("");
+      setTaxNotes("");
+      setMessage("Registro fiscal guardado para declaración anual.");
+      await loadData(userId);
+    } catch (error) {
+      setMessage(`No se pudo guardar el registro fiscal en Supabase: ${readableError(error)}`);
+    }
   }
 
   async function runMonthlyAnalysis() {
