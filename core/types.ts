@@ -1,18 +1,27 @@
 export type InstrumentType = "BONOS" | "UDIBONOS" | "CETES" | "BONDDIA";
 
+export const INSTRUMENT_TYPES = ["BONOS", "UDIBONOS", "CETES", "BONDDIA"] as const satisfies InstrumentType[];
+
+export const INSTRUMENT_LABELS: Record<InstrumentType, string> = {
+  BONOS: "BONOS",
+  UDIBONOS: "UDIBONOS",
+  CETES: "CETES",
+  BONDDIA: "BONDDIA",
+};
+
 export type InvestmentLot = {
   id: string;
   month: string;
   date: string;
   maturityDate: string;
-  instrument: "BONOS" | "UDIBONOS";
+  instrument: InstrumentType;
   amount: number;
   annualRate: number;
   inflationRate: number;
   provisionalWithholdingRate: number;
   estimatedAnnualWithholding: number;
   termYears: number;
-  couponFrequencyMonths: 6;
+  couponFrequencyMonths?: 6;
   sourceSnapshotId?: string;
   createdAt: string;
 };
@@ -55,6 +64,8 @@ export type AppSettings = {
   updatedAt: string;
   manualBonosRate?: number;
   manualUdibonosRate?: number;
+  manualCetesRate?: number;
+  manualBonddiaRate?: number;
   manualInflationAnnual?: number;
   manualProvisionalWithholdingRate?: number;
 };

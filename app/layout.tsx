@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tracker BONOS/UDIBONOS",
+  title: "Tracker CETES Directo",
   description: "Tracking mensual y proyecciones de instrumentos gubernamentales mexicanos.",
 };
 

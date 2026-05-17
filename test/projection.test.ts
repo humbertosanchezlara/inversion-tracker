@@ -34,6 +34,13 @@ describe("projection engine", () => {
     expect(point.realBalance).toBeLessThan(point.nominalBalance);
   });
 
+  it("projects non-coupon instruments as accumulated balance", () => {
+    const [point] = projectPortfolio([{ ...baseLot, instrument: "CETES", couponFrequencyMonths: undefined }], 1);
+
+    expect(point.couponsReinvested).toBe(0);
+    expect(point.nominalBalance).toBeGreaterThan(baseLot.amount);
+  });
+
   it("produces growing summaries for positive rates", () => {
     const summaries = summarizeProjection([baseLot], [10, 15, 20]);
 

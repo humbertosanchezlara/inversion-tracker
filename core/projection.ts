@@ -12,6 +12,21 @@ function realDiscountFactor(inflationRate: number, years: number) {
 
 export function projectLot(lot: InvestmentLot, horizonYears: number): ProjectionPoint[] {
   const points: ProjectionPoint[] = [];
+  if (!lot.couponFrequencyMonths) {
+    for (let year = 1; year <= horizonYears; year += 1) {
+      const nominalBalance = compoundMonthly(lot.amount, lot.annualRate, year * MONTHS_PER_YEAR);
+      points.push({
+        year,
+        contributed: lot.amount,
+        nominalBalance,
+        realBalance: nominalBalance / realDiscountFactor(lot.inflationRate, year),
+        couponsReinvested: 0,
+      });
+    }
+
+    return points;
+  }
+
   const couponRate = lot.annualRate / 2;
   const couponPeriods = Math.floor((horizonYears * MONTHS_PER_YEAR) / lot.couponFrequencyMonths);
   let principal = lot.amount;

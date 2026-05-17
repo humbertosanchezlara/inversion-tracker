@@ -20,7 +20,7 @@ function fromLot(row: Record<string, unknown>): InvestmentLot {
     provisionalWithholdingRate: Number(row.provisional_withholding_rate),
     estimatedAnnualWithholding: Number(row.estimated_annual_withholding),
     termYears: Number(row.term_years),
-    couponFrequencyMonths: 6,
+    couponFrequencyMonths: row.coupon_frequency_months === null ? undefined : 6,
     sourceSnapshotId: row.source_snapshot_id ? String(row.source_snapshot_id) : undefined,
     createdAt: String(row.created_at),
   };
@@ -40,7 +40,7 @@ function toLot(userId: string, lot: InvestmentLot) {
     provisional_withholding_rate: lot.provisionalWithholdingRate,
     estimated_annual_withholding: lot.estimatedAnnualWithholding,
     term_years: lot.termYears,
-    coupon_frequency_months: lot.couponFrequencyMonths,
+    coupon_frequency_months: lot.couponFrequencyMonths ?? null,
     source_snapshot_id: isUuid(lot.sourceSnapshotId) ? lot.sourceSnapshotId : null,
     created_at: lot.createdAt,
   };
@@ -85,6 +85,11 @@ function fromAnalysis(row: Record<string, unknown>): MonthlyAnalysis {
     rationale: (row.rationale ?? []) as string[],
     risks: (row.risks ?? []) as string[],
     dataUsed: (row.data_used ?? []) as string[],
+    macroSummary: (row.macro_summary ?? []) as string[],
+    curveSummary: (row.curve_summary ?? []) as string[],
+    portfolioSummary: (row.portfolio_summary ?? []) as string[],
+    actionItems: (row.action_items ?? []) as string[],
+    watchConditions: (row.watch_conditions ?? []) as string[],
     notFinancialAdvice: true,
   };
 }
@@ -101,6 +106,11 @@ function toAnalysis(userId: string, analysis: MonthlyAnalysis) {
     rationale: analysis.rationale,
     risks: analysis.risks,
     data_used: analysis.dataUsed,
+    macro_summary: analysis.macroSummary ?? [],
+    curve_summary: analysis.curveSummary ?? [],
+    portfolio_summary: analysis.portfolioSummary ?? [],
+    action_items: analysis.actionItems ?? [],
+    watch_conditions: analysis.watchConditions ?? [],
     not_financial_advice: analysis.notFinancialAdvice,
   };
 }
@@ -138,15 +148,17 @@ function toTaxRecord(userId: string, record: TaxDeclarationRecord) {
 
 function fromSettings(row?: Record<string, unknown> | null): AppSettings | undefined {
   if (!row) return undefined;
+  const optionalNumber = (value: unknown) => value === null || typeof value === "undefined" ? undefined : Number(value);
 
   return {
     id: "default",
     updatedAt: String(row.updated_at),
-    manualBonosRate: row.manual_bonos_rate === null ? undefined : Number(row.manual_bonos_rate),
-    manualUdibonosRate: row.manual_udibonos_rate === null ? undefined : Number(row.manual_udibonos_rate),
-    manualInflationAnnual: row.manual_inflation_annual === null ? undefined : Number(row.manual_inflation_annual),
-    manualProvisionalWithholdingRate:
-      row.manual_provisional_withholding_rate === null ? undefined : Number(row.manual_provisional_withholding_rate),
+    manualBonosRate: optionalNumber(row.manual_bonos_rate),
+    manualUdibonosRate: optionalNumber(row.manual_udibonos_rate),
+    manualCetesRate: optionalNumber(row.manual_cetes_rate),
+    manualBonddiaRate: optionalNumber(row.manual_bonddia_rate),
+    manualInflationAnnual: optionalNumber(row.manual_inflation_annual),
+    manualProvisionalWithholdingRate: optionalNumber(row.manual_provisional_withholding_rate),
   };
 }
 
@@ -156,6 +168,8 @@ function toSettings(userId: string, settings: AppSettings) {
     updated_at: settings.updatedAt,
     manual_bonos_rate: settings.manualBonosRate ?? null,
     manual_udibonos_rate: settings.manualUdibonosRate ?? null,
+    manual_cetes_rate: settings.manualCetesRate ?? null,
+    manual_bonddia_rate: settings.manualBonddiaRate ?? null,
     manual_inflation_annual: settings.manualInflationAnnual ?? null,
     manual_provisional_withholding_rate: settings.manualProvisionalWithholdingRate ?? null,
   };

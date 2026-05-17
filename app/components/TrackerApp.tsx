@@ -21,18 +21,35 @@ import {
   createManualMarketSnapshot,
   estimateAnnualWithholding,
 } from "@/core/market";
-import type { AppSettings, InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
+import { INSTRUMENT_LABELS, INSTRUMENT_TYPES } from "@/core/types";
+import type { AppSettings, InstrumentType, InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
 import { formatCurrency, formatPercent, monthKey } from "@/lib/format";
 
 const HORIZONS = [10, 15, 20, 25, 30];
+const DEFAULT_AMOUNTS: Record<InstrumentType, string> = {
+  BONOS: "4000",
+  UDIBONOS: "6000",
+  CETES: "0",
+  BONDDIA: "0",
+};
+const INSTRUMENT_ORDER: InstrumentType[] = ["CETES", "BONOS", "UDIBONOS", "BONDDIA"];
 
 function newId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
 
-function quote(snapshot: MarketSnapshot | undefined, instrument: InvestmentLot["instrument"]) {
+function quote(snapshot: MarketSnapshot | undefined, instrument: InstrumentType) {
   return snapshot?.quotes.find((item) => item.instrument === instrument && item.termYears === 10)
     ?? snapshot?.quotes.find((item) => item.instrument === instrument);
+}
+
+function lotTermYears(instrument: InstrumentType, quoteTermYears?: number) {
+  if (instrument === "BONOS" || instrument === "UDIBONOS") return quoteTermYears ?? 10;
+  return quoteTermYears ?? 1;
+}
+
+function couponFrequencyMonths(instrument: InstrumentType) {
+  return instrument === "BONOS" || instrument === "UDIBONOS" ? 6 as const : undefined;
 }
 
 function latestUsableSnapshot(snapshots: MarketSnapshot[]) {
@@ -45,7 +62,7 @@ function normalizeLot(lot: InvestmentLot): InvestmentLot {
 
   return {
     ...lot,
-    maturityDate: lot.maturityDate || addYearsIsoDate(lot.date, lot.termYears || 10),
+    maturityDate: lot.maturityDate || addYearsIsoDate(lot.date, lotTermYears(lot.instrument, lot.termYears)),
     provisionalWithholdingRate,
     estimatedAnnualWithholding:
       lot.estimatedAnnualWithholding ?? estimateAnnualWithholding(lot.amount, provisionalWithholdingRate),
@@ -69,8 +86,7 @@ export default function TrackerApp() {
   const [taxRecords, setTaxRecords] = useState<TaxDeclarationRecord[]>([]);
   const [settings, setSettings] = useState<AppSettings | undefined>();
   const [month, setMonth] = useState(monthKey());
-  const [bonosAmount, setBonosAmount] = useState("4000");
-  const [udibonosAmount, setUdibonosAmount] = useState("6000");
+  const [investmentAmounts, setInvestmentAmounts] = useState<Record<InstrumentType, string>>(DEFAULT_AMOUNTS);
   const [fiscalYear, setFiscalYear] = useState(String(new Date().getFullYear()));
   const [taxInstrument, setTaxInstrument] = useState<TaxDeclarationRecord["instrument"]>("BONOS");
   const [nominalInterest, setNominalInterest] = useState("");
@@ -79,6 +95,8 @@ export default function TrackerApp() {
   const [taxNotes, setTaxNotes] = useState("");
   const [manualBonosRate, setManualBonosRate] = useState("");
   const [manualUdibonosRate, setManualUdibonosRate] = useState("");
+  const [manualCetesRate, setManualCetesRate] = useState("");
+  const [manualBonddiaRate, setManualBonddiaRate] = useState("");
   const [manualInflationAnnual, setManualInflationAnnual] = useState("");
   const [manualProvisionalWithholdingRate, setManualProvisionalWithholdingRate] = useState("0.90");
   const [busy, setBusy] = useState<string | null>(null);
@@ -91,6 +109,12 @@ export default function TrackerApp() {
     );
     setManualUdibonosRate(
       typeof nextSettings?.manualUdibonosRate === "number" ? String(nextSettings.manualUdibonosRate * 100) : "",
+    );
+    setManualCetesRate(
+      typeof nextSettings?.manualCetesRate === "number" ? String(nextSettings.manualCetesRate * 100) : "",
+    );
+    setManualBonddiaRate(
+      typeof nextSettings?.manualBonddiaRate === "number" ? String(nextSettings.manualBonddiaRate * 100) : "",
     );
     setManualInflationAnnual(
       typeof nextSettings?.manualInflationAnnual === "number" ? String(nextSettings.manualInflationAnnual * 100) : "",
@@ -172,8 +196,7 @@ export default function TrackerApp() {
     return (activeSnapshot?.quotes ?? [])
       .slice()
       .sort((a, b) => {
-        const instrumentOrder = ["CETES", "BONOS", "UDIBONOS", "BONDDIA"];
-        const instrumentDiff = instrumentOrder.indexOf(a.instrument) - instrumentOrder.indexOf(b.instrument);
+        const instrumentDiff = INSTRUMENT_ORDER.indexOf(a.instrument) - INSTRUMENT_ORDER.indexOf(b.instrument);
         if (instrumentDiff !== 0) return instrumentDiff;
         return (a.termYears ?? 0) - (b.termYears ?? 0);
       });
@@ -213,12 +236,23 @@ export default function TrackerApp() {
       return;
     }
 
-    const bonosQuote = quote(activeSnapshot, "BONOS");
-    const udibonosQuote = quote(activeSnapshot, "UDIBONOS");
+    const requestedInstruments = INSTRUMENT_TYPES
+      .map((instrument) => ({
+        instrument,
+        amount: Number(investmentAmounts[instrument]) || 0,
+        quote: quote(activeSnapshot, instrument),
+      }))
+      .filter((item) => item.amount > 0);
     const inflationRate = activeSnapshot.inflationAnnual;
     const provisionalWithholdingRate = activeSnapshot.provisionalWithholdingRate;
-    if (!bonosQuote || !udibonosQuote || typeof inflationRate !== "number") {
-      setMessage("Faltan tasas automáticas de BONOS/UDIBONOS o inflación.");
+    const missingQuotes = requestedInstruments.filter((item) => !item.quote).map((item) => item.instrument);
+    if (requestedInstruments.length === 0) {
+      setMessage("Captura al menos un monto mayor a cero.");
+      return;
+    }
+
+    if (missingQuotes.length > 0 || typeof inflationRate !== "number") {
+      setMessage(`Faltan tasas para ${missingQuotes.join(", ") || "los instrumentos seleccionados"} o inflación.`);
       return;
     }
 
@@ -229,41 +263,25 @@ export default function TrackerApp() {
 
     const now = new Date().toISOString();
     const date = `${month}-01`;
-    const candidateLots: InvestmentLot[] = [
-      {
+    const nextLots: InvestmentLot[] = requestedInstruments.map(({ instrument, amount, quote: instrumentQuote }) => {
+      const termYears = lotTermYears(instrument, instrumentQuote?.termYears);
+      return {
         id: newId(),
         month,
         date,
-        maturityDate: addYearsIsoDate(date, bonosQuote.termYears ?? 10),
-        instrument: "BONOS",
-        amount: Number(bonosAmount),
-        annualRate: bonosQuote.annualRate,
+        maturityDate: addYearsIsoDate(date, termYears),
+        instrument,
+        amount,
+        annualRate: instrumentQuote?.annualRate ?? 0,
         inflationRate,
         provisionalWithholdingRate,
-        estimatedAnnualWithholding: estimateAnnualWithholding(Number(bonosAmount), provisionalWithholdingRate),
-        termYears: bonosQuote.termYears ?? 10,
-        couponFrequencyMonths: 6 as const,
+        estimatedAnnualWithholding: estimateAnnualWithholding(amount, provisionalWithholdingRate),
+        termYears,
+        couponFrequencyMonths: couponFrequencyMonths(instrument),
         sourceSnapshotId: activeSnapshot.id,
         createdAt: now,
-      },
-      {
-        id: newId(),
-        month,
-        date,
-        maturityDate: addYearsIsoDate(date, udibonosQuote.termYears ?? 10),
-        instrument: "UDIBONOS",
-        amount: Number(udibonosAmount),
-        annualRate: udibonosQuote.annualRate,
-        inflationRate,
-        provisionalWithholdingRate,
-        estimatedAnnualWithholding: estimateAnnualWithholding(Number(udibonosAmount), provisionalWithholdingRate),
-        termYears: udibonosQuote.termYears ?? 10,
-        couponFrequencyMonths: 6 as const,
-        sourceSnapshotId: activeSnapshot.id,
-        createdAt: now,
-      },
-    ];
-    const nextLots = candidateLots.filter((lot) => lot.amount > 0);
+      };
+    });
 
     try {
       await saveInvestmentLots(userId, nextLots);
@@ -281,6 +299,8 @@ export default function TrackerApp() {
       updatedAt: new Date().toISOString(),
       manualBonosRate: Number(manualBonosRate) / 100 || undefined,
       manualUdibonosRate: Number(manualUdibonosRate) / 100 || undefined,
+      manualCetesRate: Number(manualCetesRate) / 100 || undefined,
+      manualBonddiaRate: Number(manualBonddiaRate) / 100 || undefined,
       manualInflationAnnual: Number(manualInflationAnnual) / 100 || undefined,
       manualProvisionalWithholdingRate: Number(manualProvisionalWithholdingRate) / 100 || undefined,
     };
@@ -361,7 +381,7 @@ export default function TrackerApp() {
         body: JSON.stringify({
           month,
           marketSnapshot: activeSnapshot,
-          currentAllocation: { UDIBONOS: 60, BONOS: 40 },
+          currentAllocation: { BONOS: 40, UDIBONOS: 60, CETES: 0, BONDDIA: 0 },
           portfolio: {
             lots,
             taxRecords,
@@ -453,10 +473,10 @@ export default function TrackerApp() {
       <header className="flex flex-col justify-between gap-4 border-b border-[var(--line)] pb-5 lg:flex-row lg:items-end">
         <div>
           <p className="text-sm font-semibold text-[var(--accent)]">Tracker mensual</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-normal">BONOS / UDIBONOS</h1>
+          <h1 className="mt-1 text-3xl font-semibold tracking-normal">CETES Directo</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-            Registra cuánto invertiste cada mes, guarda las tasas usadas y proyecta retornos con cupones semestrales
-            reinvertidos. El análisis OpenAI es informativo y no ejecuta compras.
+            Registra cuánto invertiste cada mes en BONOS, UDIBONOS, CETES y BONDDIA, guarda las tasas usadas y proyecta
+            retornos. El análisis OpenAI es informativo y no ejecuta compras.
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -491,11 +511,12 @@ export default function TrackerApp() {
         </div>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
         <Metric title="Total invertido" value={formatCurrency(totalInvested)} />
         <Metric title="Lotes registrados" value={String(lots.length)} />
-        <Metric title="Tasa BONOS" value={formatPercent(quote(activeSnapshot, "BONOS")?.annualRate)} />
-        <Metric title="Tasa UDIBONOS" value={formatPercent(quote(activeSnapshot, "UDIBONOS")?.annualRate)} />
+        {INSTRUMENT_TYPES.map((instrument) => (
+          <Metric key={instrument} title={`Tasa ${instrument}`} value={formatPercent(quote(activeSnapshot, instrument)?.annualRate)} />
+        ))}
       </section>
 
       <section className="overflow-hidden rounded-md border border-[var(--line)] bg-white">
@@ -555,26 +576,20 @@ export default function TrackerApp() {
                 onChange={(event) => setMonth(event.target.value)}
               />
             </label>
-            <label className="grid gap-1 text-sm font-medium">
-              BONOS
-              <input
-                className="h-10 rounded-md border border-[var(--line)] px-3"
-                type="number"
-                min="0"
-                value={bonosAmount}
-                onChange={(event) => setBonosAmount(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-medium">
-              UDIBONOS
-              <input
-                className="h-10 rounded-md border border-[var(--line)] px-3"
-                type="number"
-                min="0"
-                value={udibonosAmount}
-                onChange={(event) => setUdibonosAmount(event.target.value)}
-              />
-            </label>
+            {INSTRUMENT_TYPES.map((instrument) => (
+              <label className="grid gap-1 text-sm font-medium" key={instrument}>
+                {INSTRUMENT_LABELS[instrument]}
+                <input
+                  className="h-10 rounded-md border border-[var(--line)] px-3"
+                  type="number"
+                  min="0"
+                  value={investmentAmounts[instrument]}
+                  onChange={(event) =>
+                    setInvestmentAmounts((current) => ({ ...current, [instrument]: event.target.value }))
+                  }
+                />
+              </label>
+            ))}
             <button
               className="mt-2 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[var(--foreground)] px-4 text-sm font-semibold text-white"
               onClick={saveMonthlyInvestment}
@@ -765,10 +780,11 @@ export default function TrackerApp() {
                   value={taxInstrument}
                   onChange={(event) => setTaxInstrument(event.target.value as TaxDeclarationRecord["instrument"])}
                 >
-                  <option value="BONOS">BONOS</option>
-                  <option value="UDIBONOS">UDIBONOS</option>
-                  <option value="CETES">CETES</option>
-                  <option value="BONDDIA">BONDDIA</option>
+                  {INSTRUMENT_TYPES.map((instrument) => (
+                    <option value={instrument} key={instrument}>
+                      {INSTRUMENT_LABELS[instrument]}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
@@ -835,7 +851,7 @@ export default function TrackerApp() {
           <Settings size={18} className="text-[var(--accent)]" />
           <h2 className="text-lg font-semibold">Configuración manual</h2>
         </div>
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
           <label className="grid gap-1 text-sm font-medium">
             BONOS %
             <input
@@ -854,6 +870,26 @@ export default function TrackerApp() {
               step="0.01"
               value={manualUdibonosRate}
               onChange={(event) => setManualUdibonosRate(event.target.value)}
+            />
+          </label>
+          <label className="grid gap-1 text-sm font-medium">
+            CETES %
+            <input
+              className="h-10 rounded-md border border-[var(--line)] px-3"
+              type="number"
+              step="0.01"
+              value={manualCetesRate}
+              onChange={(event) => setManualCetesRate(event.target.value)}
+            />
+          </label>
+          <label className="grid gap-1 text-sm font-medium">
+            BONDDIA %
+            <input
+              className="h-10 rounded-md border border-[var(--line)] px-3"
+              type="number"
+              step="0.01"
+              value={manualBonddiaRate}
+              onChange={(event) => setManualBonddiaRate(event.target.value)}
             />
           </label>
           <label className="grid gap-1 text-sm font-medium">
@@ -880,7 +916,8 @@ export default function TrackerApp() {
         <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <p className="text-xs leading-5 text-[var(--muted)]">
             Si CETES Directo, INEGI o la tasa fiscal no se pueden consultar, estos valores toman el control para registrar
-            lotes y generar proyecciones. Para 2026, Art. 24 LIF está configurado en 0.90% anual sobre capital.
+            lotes de cualquier instrumento y generar proyecciones. Para 2026, Art. 24 LIF está configurado en 0.90%
+            anual sobre capital.
           </p>
           <button
             className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-[var(--foreground)] px-4 text-sm font-semibold text-white"

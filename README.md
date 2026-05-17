@@ -1,6 +1,6 @@
 # Inversion Tracker
 
-Tracker personal para registrar inversiones mensuales en BONOS/UDIBONOS, proyectar vencimientos y retornos, guardar datos fiscales para declaración anual y generar un análisis mensual con OpenAI.
+Tracker personal para registrar inversiones mensuales en BONOS, UDIBONOS, CETES y BONDDIA, proyectar vencimientos y retornos, guardar datos fiscales para declaración anual y generar un análisis mensual con OpenAI.
 
 ## Local
 
@@ -28,4 +28,4 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 ## Supabase
 
-El schema inicial está en `supabase/schema.sql`.
+El schema inicial está en `supabase/schema.sql`. Para una base existente, corre también `supabase/20260517_add_cetes_bonddia_lots.sql`.

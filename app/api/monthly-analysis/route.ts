@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { randomUUID } from "node:crypto";
-import type { InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
+import type { InstrumentType, InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
 
 type Body = {
   month: string;
@@ -18,10 +18,7 @@ type Body = {
       annualRate: number;
     }>;
   };
-  currentAllocation?: {
-    BONOS: number;
-    UDIBONOS: number;
-  };
+  currentAllocation?: Record<InstrumentType, number>;
 };
 
 const schema = {
@@ -116,7 +113,7 @@ export async function POST(request: Request) {
             task:
               "Haz un análisis mensual integral: curva de tasas por plazos, inflación, condiciones macro de México/mundo inferibles de tasas/FX/inflación disponibles, y cartera acumulada. La base es 60% UDIBONOS / 40% BONOS, pero puedes recomendar un split distinto dentro de BONOS, UDIBONOS, CETES y BONDDIA. Devuelve solo el JSON del schema.",
             month: body.month,
-            currentAllocation: body.currentAllocation ?? { UDIBONOS: 60, BONOS: 40 },
+            currentAllocation: body.currentAllocation ?? { BONOS: 40, UDIBONOS: 60, CETES: 0, BONDDIA: 0 },
             marketSnapshot: body.marketSnapshot,
             portfolio: body.portfolio,
           }),

@@ -1,4 +1,4 @@
--- Retirement BONOS/UDIBONOS tracker schema
+-- Mexican government instruments tracker schema
 -- Run this in Supabase SQL Editor after creating the project.
 
 create extension if not exists pgcrypto;
@@ -9,14 +9,14 @@ create table if not exists public.investment_lots (
   month text not null check (month ~ '^\d{4}-\d{2}$'),
   investment_date date not null,
   maturity_date date not null,
-  instrument text not null check (instrument in ('BONOS', 'UDIBONOS')),
+  instrument text not null check (instrument in ('BONOS', 'UDIBONOS', 'CETES', 'BONDDIA')),
   amount numeric(14, 2) not null check (amount >= 0),
   annual_rate numeric(10, 6) not null check (annual_rate >= 0),
   inflation_rate numeric(10, 6) not null check (inflation_rate >= 0),
   provisional_withholding_rate numeric(10, 6) not null check (provisional_withholding_rate >= 0),
   estimated_annual_withholding numeric(14, 2) not null check (estimated_annual_withholding >= 0),
   term_years integer not null default 10 check (term_years > 0),
-  coupon_frequency_months integer not null default 6 check (coupon_frequency_months > 0),
+  coupon_frequency_months integer check (coupon_frequency_months > 0),
   source_snapshot_id uuid,
   created_at timestamptz not null default now()
 );
@@ -46,6 +46,11 @@ create table if not exists public.monthly_analyses (
   rationale text[] not null default '{}',
   risks text[] not null default '{}',
   data_used text[] not null default '{}',
+  macro_summary text[] not null default '{}',
+  curve_summary text[] not null default '{}',
+  portfolio_summary text[] not null default '{}',
+  action_items text[] not null default '{}',
+  watch_conditions text[] not null default '{}',
   not_financial_advice boolean not null default true
 );
 
@@ -68,6 +73,8 @@ create table if not exists public.app_settings (
   updated_at timestamptz not null default now(),
   manual_bonos_rate numeric(10, 6),
   manual_udibonos_rate numeric(10, 6),
+  manual_cetes_rate numeric(10, 6),
+  manual_bonddia_rate numeric(10, 6),
   manual_inflation_annual numeric(10, 6),
   manual_provisional_withholding_rate numeric(10, 6)
 );
