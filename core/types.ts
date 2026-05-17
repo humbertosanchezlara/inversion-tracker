@@ -84,6 +84,27 @@ export type TaxDeclarationSummary = {
   records: TaxDeclarationRecord[];
 };
 
+export type TaxDeclarationEstimateLine = {
+  fiscalYear: number;
+  instrument: InstrumentType;
+  lotsCount: number;
+  investedCapital: number;
+  nominalInterest: number;
+  inflationAdjustment: number;
+  realInterest: number;
+  isrWithheld: number;
+};
+
+export type TaxDeclarationEstimateSummary = {
+  fiscalYear: number;
+  investedCapital: number;
+  nominalInterest: number;
+  inflationAdjustment: number;
+  realInterest: number;
+  isrWithheld: number;
+  lines: TaxDeclarationEstimateLine[];
+};
+
 export type MonthlyAnalysis = {
   id: string;
   month: string;

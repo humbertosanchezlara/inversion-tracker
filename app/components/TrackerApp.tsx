@@ -14,7 +14,7 @@ import {
 } from "@/data/supabaseRepository";
 import { projectPortfolio, summarizeProjection } from "@/core/projection";
 import { formatIsoDate, addYearsIsoDate } from "@/core/dates";
-import { summarizeTaxDeclaration } from "@/core/tax";
+import { estimateTaxDeclarationFromLots, summarizeTaxDeclaration } from "@/core/tax";
 import {
   CURRENT_LIF_ARTICLE_24_WITHHOLDING_RATE,
   estimateAnnualWithholding,
@@ -140,9 +140,14 @@ export default function TrackerApp() {
   const summaries = useMemo(() => summarizeProjection(lots, HORIZONS), [lots]);
   const chartData = useMemo(() => projectPortfolio(lots, 30), [lots]);
   const totalInvested = lots.reduce((sum, lot) => sum + lot.amount, 0);
+  const fiscalYearNumber = Number(fiscalYear);
   const currentTaxSummary = useMemo(
-    () => summarizeTaxDeclaration(taxRecords, Number(fiscalYear)),
-    [taxRecords, fiscalYear],
+    () => summarizeTaxDeclaration(taxRecords, fiscalYearNumber),
+    [taxRecords, fiscalYearNumber],
+  );
+  const currentTaxEstimate = useMemo(
+    () => estimateTaxDeclarationFromLots(lots, fiscalYearNumber),
+    [lots, fiscalYearNumber],
   );
   const nextMaturities = useMemo(
     () =>
@@ -704,18 +709,70 @@ export default function TrackerApp() {
             <h2 className="text-lg font-semibold">Declaración anual / ISR</h2>
           </div>
           <div className="grid gap-3">
+            <label className="grid gap-1 text-sm font-medium">
+              Año fiscal
+              <input
+                className="h-10 rounded-md border border-[var(--line)] px-3"
+                type="number"
+                value={fiscalYear}
+                onChange={(event) => setFiscalYear(event.target.value)}
+              />
+            </label>
+
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase text-[var(--accent)]">Estimado desde inversiones</p>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <MiniMetric title="Nominal" value={formatCurrency(currentTaxEstimate.nominalInterest)} />
+                <MiniMetric title="Acumulable" value={formatCurrency(currentTaxEstimate.realInterest)} />
+                <MiniMetric title="ISR prov." value={formatCurrency(currentTaxEstimate.isrWithheld)} />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-md border border-[var(--line)]">
+              <table className="w-full min-w-[520px] text-sm">
+                <thead className="bg-[#eef2ef] text-left">
+                  <tr>
+                    <th className="px-3 py-2">Instrumento</th>
+                    <th className="px-3 py-2">Lotes</th>
+                    <th className="px-3 py-2">Nominal</th>
+                    <th className="px-3 py-2">Acumulable</th>
+                    <th className="px-3 py-2">ISR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentTaxEstimate.lines.length > 0 ? (
+                    currentTaxEstimate.lines.map((line) => (
+                      <tr className="border-t border-[var(--line)]" key={line.instrument}>
+                        <td className="px-3 py-2 font-semibold">{line.instrument}</td>
+                        <td className="px-3 py-2">{line.lotsCount}</td>
+                        <td className="px-3 py-2">{formatCurrency(line.nominalInterest)}</td>
+                        <td className="px-3 py-2">{formatCurrency(line.realInterest)}</td>
+                        <td className="px-3 py-2">{formatCurrency(line.isrWithheld)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td className="px-3 py-4 text-[var(--muted)]" colSpan={5}>
+                        Sin inversiones activas para este año fiscal.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase text-[var(--accent)]">Constancia oficial / ajuste</p>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <MiniMetric title="Nominal" value={formatCurrency(currentTaxSummary.nominalInterest)} />
+                <MiniMetric title="Acumulable" value={formatCurrency(currentTaxSummary.realInterest)} />
+                <MiniMetric title="ISR" value={formatCurrency(currentTaxSummary.isrWithheld)} />
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <label className="grid gap-1 text-sm font-medium">
-                Año fiscal
-                <input
-                  className="h-10 rounded-md border border-[var(--line)] px-3"
-                  type="number"
-                  value={fiscalYear}
-                  onChange={(event) => setFiscalYear(event.target.value)}
-                />
-              </label>
-              <label className="grid gap-1 text-sm font-medium">
-                Instrumento
+                Instrumento oficial
                 <select
                   className="h-10 rounded-md border border-[var(--line)] px-3"
                   value={taxInstrument}
@@ -730,7 +787,7 @@ export default function TrackerApp() {
               </label>
             </div>
             <label className="grid gap-1 text-sm font-medium">
-              Interés nominal
+              Interés nominal oficial
               <input
                 className="h-10 rounded-md border border-[var(--line)] px-3"
                 type="number"
@@ -740,7 +797,7 @@ export default function TrackerApp() {
               />
             </label>
             <label className="grid gap-1 text-sm font-medium">
-              Interés real / acumulable
+              Interés real / acumulable oficial
               <input
                 className="h-10 rounded-md border border-[var(--line)] px-3"
                 type="number"
@@ -775,14 +832,9 @@ export default function TrackerApp() {
               Guardar dato fiscal
             </button>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-            <MiniMetric title="Nominal" value={formatCurrency(currentTaxSummary.nominalInterest)} />
-            <MiniMetric title="Acumulable" value={formatCurrency(currentTaxSummary.realInterest)} />
-            <MiniMetric title="ISR" value={formatCurrency(currentTaxSummary.isrWithheld)} />
-          </div>
           <p className="mt-3 text-xs leading-5 text-[var(--muted)]">
-            Usa esta sección para copiar los importes de tu constancia fiscal anual de CETES Directo. La app los
-            conserva como tracking; no sustituye el cálculo oficial del SAT.
+            El estimado se deriva de los lotes registrados y se prorratea por días activos del año fiscal. La constancia
+            oficial queda guardada por separado para conciliación.
           </p>
         </div>
       </section>
