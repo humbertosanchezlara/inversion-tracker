@@ -59,17 +59,6 @@ export type MarketSnapshot = {
   notes: string[];
 };
 
-export type AppSettings = {
-  id: "default";
-  updatedAt: string;
-  manualBonosRate?: number;
-  manualUdibonosRate?: number;
-  manualCetesRate?: number;
-  manualBonddiaRate?: number;
-  manualInflationAnnual?: number;
-  manualProvisionalWithholdingRate?: number;
-};
-
 export type ProjectionPoint = {
   year: number;
   contributed: number;

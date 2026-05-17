@@ -68,22 +68,10 @@ create table if not exists public.tax_declaration_records (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.app_settings (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  updated_at timestamptz not null default now(),
-  manual_bonos_rate numeric(10, 6),
-  manual_udibonos_rate numeric(10, 6),
-  manual_cetes_rate numeric(10, 6),
-  manual_bonddia_rate numeric(10, 6),
-  manual_inflation_annual numeric(10, 6),
-  manual_provisional_withholding_rate numeric(10, 6)
-);
-
 alter table public.investment_lots enable row level security;
 alter table public.market_snapshots enable row level security;
 alter table public.monthly_analyses enable row level security;
 alter table public.tax_declaration_records enable row level security;
-alter table public.app_settings enable row level security;
 
 grant usage on schema public to anon, authenticated;
 
@@ -91,7 +79,6 @@ grant select, insert, update, delete on public.investment_lots to authenticated;
 grant select, insert, update, delete on public.market_snapshots to authenticated;
 grant select, insert, update, delete on public.monthly_analyses to authenticated;
 grant select, insert, update, delete on public.tax_declaration_records to authenticated;
-grant select, insert, update, delete on public.app_settings to authenticated;
 
 create policy "Users manage own investment lots"
   on public.investment_lots
@@ -113,12 +100,6 @@ create policy "Users manage own monthly analyses"
 
 create policy "Users manage own tax records"
   on public.tax_declaration_records
-  for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-
-create policy "Users manage own settings"
-  on public.app_settings
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);

@@ -28,4 +28,4 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 ## Supabase
 
-El schema inicial está en `supabase/schema.sql`. Para una base existente, corre también `supabase/20260517_add_cetes_bonddia_lots.sql`.
+El schema inicial está en `supabase/schema.sql`. Para una base existente, corre también `supabase/20260517_add_cetes_bonddia_lots.sql` y `supabase/20260517_drop_manual_settings.sql`.

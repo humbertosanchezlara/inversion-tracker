@@ -1,6 +1,6 @@
 "use client";
 
-import type { AppSettings, InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
+import type { InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
 import { supabase } from "@/lib/supabaseClient";
 
 function isUuid(value?: string) {
@@ -146,45 +146,15 @@ function toTaxRecord(userId: string, record: TaxDeclarationRecord) {
   };
 }
 
-function fromSettings(row?: Record<string, unknown> | null): AppSettings | undefined {
-  if (!row) return undefined;
-  const optionalNumber = (value: unknown) => value === null || typeof value === "undefined" ? undefined : Number(value);
-
-  return {
-    id: "default",
-    updatedAt: String(row.updated_at),
-    manualBonosRate: optionalNumber(row.manual_bonos_rate),
-    manualUdibonosRate: optionalNumber(row.manual_udibonos_rate),
-    manualCetesRate: optionalNumber(row.manual_cetes_rate),
-    manualBonddiaRate: optionalNumber(row.manual_bonddia_rate),
-    manualInflationAnnual: optionalNumber(row.manual_inflation_annual),
-    manualProvisionalWithholdingRate: optionalNumber(row.manual_provisional_withholding_rate),
-  };
-}
-
-function toSettings(userId: string, settings: AppSettings) {
-  return {
-    user_id: userId,
-    updated_at: settings.updatedAt,
-    manual_bonos_rate: settings.manualBonosRate ?? null,
-    manual_udibonos_rate: settings.manualUdibonosRate ?? null,
-    manual_cetes_rate: settings.manualCetesRate ?? null,
-    manual_bonddia_rate: settings.manualBonddiaRate ?? null,
-    manual_inflation_annual: settings.manualInflationAnnual ?? null,
-    manual_provisional_withholding_rate: settings.manualProvisionalWithholdingRate ?? null,
-  };
-}
-
 export async function loadCloudData(userId: string) {
-  const [lots, snapshots, analyses, taxRecords, settings] = await Promise.all([
+  const [lots, snapshots, analyses, taxRecords] = await Promise.all([
     supabase.from("investment_lots").select("*").eq("user_id", userId).order("investment_date", { ascending: false }),
     supabase.from("market_snapshots").select("*").eq("user_id", userId).order("fetched_at", { ascending: false }),
     supabase.from("monthly_analyses").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
     supabase.from("tax_declaration_records").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
-    supabase.from("app_settings").select("*").eq("user_id", userId).maybeSingle(),
   ]);
 
-  for (const result of [lots, snapshots, analyses, taxRecords, settings]) {
+  for (const result of [lots, snapshots, analyses, taxRecords]) {
     if (result.error) throw result.error;
   }
 
@@ -193,7 +163,6 @@ export async function loadCloudData(userId: string) {
     snapshots: (snapshots.data ?? []).map(fromSnapshot),
     analyses: (analyses.data ?? []).map(fromAnalysis),
     taxRecords: (taxRecords.data ?? []).map(fromTaxRecord),
-    settings: fromSettings(settings.data),
   };
 }
 
@@ -214,10 +183,5 @@ export async function saveMonthlyAnalysis(userId: string, analysis: MonthlyAnaly
 
 export async function saveTaxDeclarationRecord(userId: string, record: TaxDeclarationRecord) {
   const { error } = await supabase.from("tax_declaration_records").upsert(toTaxRecord(userId, record));
-  if (error) throw error;
-}
-
-export async function saveAppSettings(userId: string, settings: AppSettings) {
-  const { error } = await supabase.from("app_settings").upsert(toSettings(userId, settings));
   if (error) throw error;
 }

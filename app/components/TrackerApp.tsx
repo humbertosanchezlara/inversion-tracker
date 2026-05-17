@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { BarChart3, Brain, CalendarClock, Database, FileText, LogOut, RefreshCw, Save, Settings } from "lucide-react";
+import { BarChart3, Brain, CalendarClock, Database, FileText, LogOut, RefreshCw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import {
   loadCloudData,
-  saveAppSettings,
   saveInvestmentLots,
   saveMarketSnapshot,
   saveMonthlyAnalysis,
@@ -18,11 +17,10 @@ import { formatIsoDate, addYearsIsoDate } from "@/core/dates";
 import { summarizeTaxDeclaration } from "@/core/tax";
 import {
   CURRENT_LIF_ARTICLE_24_WITHHOLDING_RATE,
-  createManualMarketSnapshot,
   estimateAnnualWithholding,
 } from "@/core/market";
 import { INSTRUMENT_LABELS, INSTRUMENT_TYPES } from "@/core/types";
-import type { AppSettings, InstrumentType, InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
+import type { InstrumentType, InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
 import { formatCurrency, formatPercent, monthKey } from "@/lib/format";
 
 const HORIZONS = [10, 15, 20, 25, 30];
@@ -84,7 +82,6 @@ export default function TrackerApp() {
   const [snapshots, setSnapshots] = useState<MarketSnapshot[]>([]);
   const [analyses, setAnalyses] = useState<MonthlyAnalysis[]>([]);
   const [taxRecords, setTaxRecords] = useState<TaxDeclarationRecord[]>([]);
-  const [settings, setSettings] = useState<AppSettings | undefined>();
   const [month, setMonth] = useState(monthKey());
   const [investmentAmounts, setInvestmentAmounts] = useState<Record<InstrumentType, string>>(DEFAULT_AMOUNTS);
   const [fiscalYear, setFiscalYear] = useState(String(new Date().getFullYear()));
@@ -93,38 +90,9 @@ export default function TrackerApp() {
   const [realInterest, setRealInterest] = useState("");
   const [isrWithheld, setIsrWithheld] = useState("");
   const [taxNotes, setTaxNotes] = useState("");
-  const [manualBonosRate, setManualBonosRate] = useState("");
-  const [manualUdibonosRate, setManualUdibonosRate] = useState("");
-  const [manualCetesRate, setManualCetesRate] = useState("");
-  const [manualBonddiaRate, setManualBonddiaRate] = useState("");
-  const [manualInflationAnnual, setManualInflationAnnual] = useState("");
-  const [manualProvisionalWithholdingRate, setManualProvisionalWithholdingRate] = useState("0.90");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
-
-  const hydrateSettingsForm = useCallback((nextSettings: AppSettings | undefined) => {
-    setManualBonosRate(
-      typeof nextSettings?.manualBonosRate === "number" ? String(nextSettings.manualBonosRate * 100) : "",
-    );
-    setManualUdibonosRate(
-      typeof nextSettings?.manualUdibonosRate === "number" ? String(nextSettings.manualUdibonosRate * 100) : "",
-    );
-    setManualCetesRate(
-      typeof nextSettings?.manualCetesRate === "number" ? String(nextSettings.manualCetesRate * 100) : "",
-    );
-    setManualBonddiaRate(
-      typeof nextSettings?.manualBonddiaRate === "number" ? String(nextSettings.manualBonddiaRate * 100) : "",
-    );
-    setManualInflationAnnual(
-      typeof nextSettings?.manualInflationAnnual === "number" ? String(nextSettings.manualInflationAnnual * 100) : "",
-    );
-    setManualProvisionalWithholdingRate(
-      typeof nextSettings?.manualProvisionalWithholdingRate === "number"
-        ? String(nextSettings.manualProvisionalWithholdingRate * 100)
-        : "0.90",
-    );
-  }, []);
 
   const loadData = useCallback(async (userId: string) => {
     const data = await loadCloudData(userId);
@@ -132,9 +100,7 @@ export default function TrackerApp() {
     setSnapshots(data.snapshots);
     setAnalyses(data.analyses);
     setTaxRecords(data.taxRecords);
-    setSettings(data.settings);
-    hydrateSettingsForm(data.settings);
-  }, [hydrateSettingsForm]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +124,6 @@ export default function TrackerApp() {
         setSnapshots([]);
         setAnalyses([]);
         setTaxRecords([]);
-        setSettings(undefined);
       }
     });
 
@@ -168,10 +133,9 @@ export default function TrackerApp() {
     };
   }, [loadData]);
 
-  const manualSnapshot = useMemo(() => createManualMarketSnapshot(settings), [settings]);
   const activeSnapshot = useMemo(
-    () => latestUsableSnapshot(snapshots) ?? manualSnapshot,
-    [snapshots, manualSnapshot],
+    () => latestUsableSnapshot(snapshots),
+    [snapshots],
   );
   const summaries = useMemo(() => summarizeProjection(lots, HORIZONS), [lots]);
   const chartData = useMemo(() => projectPortfolio(lots, 30), [lots]);
@@ -292,28 +256,6 @@ export default function TrackerApp() {
     }
   }
 
-  async function saveSettings() {
-    if (!userId) return;
-    const nextSettings: AppSettings = {
-      id: "default",
-      updatedAt: new Date().toISOString(),
-      manualBonosRate: Number(manualBonosRate) / 100 || undefined,
-      manualUdibonosRate: Number(manualUdibonosRate) / 100 || undefined,
-      manualCetesRate: Number(manualCetesRate) / 100 || undefined,
-      manualBonddiaRate: Number(manualBonddiaRate) / 100 || undefined,
-      manualInflationAnnual: Number(manualInflationAnnual) / 100 || undefined,
-      manualProvisionalWithholdingRate: Number(manualProvisionalWithholdingRate) / 100 || undefined,
-    };
-
-    try {
-      await saveAppSettings(userId, nextSettings);
-      setSettings(nextSettings);
-      setMessage("Configuración manual actualizada.");
-    } catch (error) {
-      setMessage(`No se pudo guardar la configuración en Supabase: ${readableError(error)}`);
-    }
-  }
-
   async function saveTaxRecord() {
     if (!userId) return;
     const year = Number(fiscalYear);
@@ -356,7 +298,7 @@ export default function TrackerApp() {
       return;
     }
     if (!activeSnapshot) {
-      const text = "Faltan tasas/inflación. Actualiza fuentes o llena Configuración manual.";
+      const text = "Faltan tasas/inflación. Actualiza fuentes antes de generar análisis.";
       setMessage(text);
       setAnalysisMessage(text);
       return;
@@ -365,7 +307,7 @@ export default function TrackerApp() {
     const hasBonos = activeSnapshot.quotes.some((item) => item.instrument === "BONOS");
     const hasUdibonos = activeSnapshot.quotes.some((item) => item.instrument === "UDIBONOS");
     if (!hasBonos || !hasUdibonos || typeof activeSnapshot.inflationAnnual !== "number") {
-      const text = "El análisis necesita BONOS, UDIBONOS e inflación. Completa esos valores en Configuración manual.";
+      const text = "El análisis necesita BONOS, UDIBONOS e inflación. Actualiza fuentes.";
       setMessage(text);
       setAnalysisMessage(text);
       return;
@@ -506,8 +448,7 @@ export default function TrackerApp() {
 
       {missingManualConfig ? (
         <div className="rounded-md border border-[#e7c46b] bg-[#fff8e6] px-4 py-3 text-sm text-[#6f4a00]">
-          No hay datos automáticos completos. Captura tasas, inflación y retención provisional en Configuración para poder
-          registrar inversiones y proyectar.
+          No hay datos automáticos completos. Actualiza fuentes para poder registrar inversiones y proyectar.
         </div>
       ) : null}
 
@@ -551,7 +492,7 @@ export default function TrackerApp() {
               ) : (
                 <tr>
                   <td className="px-4 py-6 text-[var(--muted)]" colSpan={4}>
-                    Actualiza fuentes o captura tasas manuales para ver la curva disponible.
+                    Actualiza fuentes para ver la curva disponible.
                   </td>
                 </tr>
               )}
@@ -843,89 +784,6 @@ export default function TrackerApp() {
             Usa esta sección para copiar los importes de tu constancia fiscal anual de CETES Directo. La app los
             conserva como tracking; no sustituye el cálculo oficial del SAT.
           </p>
-        </div>
-      </section>
-
-      <section className="rounded-md border border-[var(--line)] bg-white p-4">
-        <div className="mb-4 flex items-center gap-2">
-          <Settings size={18} className="text-[var(--accent)]" />
-          <h2 className="text-lg font-semibold">Configuración manual</h2>
-        </div>
-        <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <label className="grid gap-1 text-sm font-medium">
-            BONOS %
-            <input
-              className="h-10 rounded-md border border-[var(--line)] px-3"
-              type="number"
-              step="0.01"
-              value={manualBonosRate}
-              onChange={(event) => setManualBonosRate(event.target.value)}
-            />
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            UDIBONOS %
-            <input
-              className="h-10 rounded-md border border-[var(--line)] px-3"
-              type="number"
-              step="0.01"
-              value={manualUdibonosRate}
-              onChange={(event) => setManualUdibonosRate(event.target.value)}
-            />
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            CETES %
-            <input
-              className="h-10 rounded-md border border-[var(--line)] px-3"
-              type="number"
-              step="0.01"
-              value={manualCetesRate}
-              onChange={(event) => setManualCetesRate(event.target.value)}
-            />
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            BONDDIA %
-            <input
-              className="h-10 rounded-md border border-[var(--line)] px-3"
-              type="number"
-              step="0.01"
-              value={manualBonddiaRate}
-              onChange={(event) => setManualBonddiaRate(event.target.value)}
-            />
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            Inflación anual %
-            <input
-              className="h-10 rounded-md border border-[var(--line)] px-3"
-              type="number"
-              step="0.01"
-              value={manualInflationAnnual}
-              onChange={(event) => setManualInflationAnnual(event.target.value)}
-            />
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            Retención Art. 24 LIF %
-            <input
-              className="h-10 rounded-md border border-[var(--line)] px-3"
-              type="number"
-              step="0.01"
-              value={manualProvisionalWithholdingRate}
-              onChange={(event) => setManualProvisionalWithholdingRate(event.target.value)}
-            />
-          </label>
-        </div>
-        <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <p className="text-xs leading-5 text-[var(--muted)]">
-            Si CETES Directo, INEGI o la tasa fiscal no se pueden consultar, estos valores toman el control para registrar
-            lotes de cualquier instrumento y generar proyecciones. Para 2026, Art. 24 LIF está configurado en 0.90%
-            anual sobre capital.
-          </p>
-          <button
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-[var(--foreground)] px-4 text-sm font-semibold text-white"
-            onClick={saveSettings}
-          >
-            <Settings size={16} />
-            Guardar configuración
-          </button>
         </div>
       </section>
     </main>
