@@ -36,7 +36,8 @@ function quote(snapshot: MarketSnapshot | undefined, instrument: InvestmentLot["
 }
 
 function latestUsableSnapshot(snapshots: MarketSnapshot[]) {
-  return snapshots.find((snapshot) => snapshot.quotes.length > 0 && typeof snapshot.inflationAnnual === "number");
+  const usable = snapshots.filter((snapshot) => snapshot.quotes.length > 0 && typeof snapshot.inflationAnnual === "number");
+  return usable.find((snapshot) => snapshot.quotes.length >= 5) ?? usable[0];
 }
 
 function normalizeLot(lot: InvestmentLot): InvestmentLot {
@@ -500,6 +501,11 @@ export default function TrackerApp() {
       <section className="overflow-hidden rounded-md border border-[var(--line)] bg-white">
         <div className="border-b border-[var(--line)] px-4 py-3">
           <h2 className="text-lg font-semibold">Curva disponible por instrumento</h2>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            {curveQuotes.length > 0
+              ? `${curveQuotes.length} tasas cargadas del snapshot activo.`
+              : "Sin curva cargada todavía."}
+          </p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
