@@ -176,6 +176,9 @@ export default function TrackerApp() {
     [lots],
   );
   const lotRowsTotal = lotRows.reduce((sum, lot) => sum + lot.amount, 0);
+  const upcomingMaturities = lotRows.filter(
+    (lot): lot is InvestmentLot & { maturityDate: string } => Boolean(lot.maturityDate),
+  );
   const latestAnalysis = analyses[0];
   const missingManualConfig = !activeSnapshot;
   const userId = session?.user.id;
@@ -392,7 +395,7 @@ export default function TrackerApp() {
             taxRecords,
             totalInvested,
             currentAllocation: allocationByInstrument,
-            upcomingMaturities: nextMaturities.map((lot) => ({
+            upcomingMaturities: upcomingMaturities.map((lot) => ({
               instrument: lot.instrument,
               amount: lot.amount,
               maturityDate: lot.maturityDate,
