@@ -30,6 +30,12 @@ const DEFAULT_AMOUNTS: Record<InstrumentType, string> = {
   CETES: "0",
   BONDDIA: "0",
 };
+const EMPTY_AMOUNTS: Record<InstrumentType, string> = {
+  BONOS: "0",
+  UDIBONOS: "0",
+  CETES: "0",
+  BONDDIA: "0",
+};
 const INSTRUMENT_ORDER: InstrumentType[] = ["CETES", "BONOS", "UDIBONOS", "BONDDIA"];
 
 function newId() {
@@ -99,6 +105,7 @@ export default function TrackerApp() {
   const [taxNotes, setTaxNotes] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [investmentMessage, setInvestmentMessage] = useState<string | null>(null);
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
 
   const loadData = useCallback(async (userId: string) => {
@@ -156,18 +163,25 @@ export default function TrackerApp() {
     () => estimateTaxDeclarationFromLots(lots, fiscalYearNumber),
     [lots, fiscalYearNumber],
   );
-  const nextMaturities = useMemo(
+  const lotRows = useMemo(
     () =>
       lots
-        .filter((lot): lot is InvestmentLot & { maturityDate: string } => Boolean(lot.maturityDate))
         .slice()
-        .sort((a, b) => a.maturityDate.localeCompare(b.maturityDate))
-        .slice(0, 6),
+        .sort((a, b) => {
+          if (a.maturityDate && b.maturityDate) return a.maturityDate.localeCompare(b.maturityDate);
+          if (a.maturityDate) return -1;
+          if (b.maturityDate) return 1;
+          return b.createdAt.localeCompare(a.createdAt);
+        }),
     [lots],
   );
+  const lotRowsTotal = lotRows.reduce((sum, lot) => sum + lot.amount, 0);
   const latestAnalysis = analyses[0];
   const missingManualConfig = !activeSnapshot;
   const userId = session?.user.id;
+  const requiresInvestmentDates = INSTRUMENT_TYPES.some(
+    (instrument) => instrument !== "BONDDIA" && (Number(investmentAmounts[instrument]) || 0) > 0,
+  );
   const curveQuotes = useMemo(() => {
     return (activeSnapshot?.quotes ?? [])
       .slice()
@@ -213,8 +227,11 @@ export default function TrackerApp() {
 
   async function saveMonthlyInvestment() {
     if (!userId) return;
+    setInvestmentMessage(null);
     if (!activeSnapshot) {
-      setMessage("No hay snapshot de tasas e inflación para registrar lotes.");
+      const text = "No hay snapshot de tasas e inflación para registrar lotes.";
+      setMessage(text);
+      setInvestmentMessage(text);
       return;
     }
 
@@ -230,27 +247,37 @@ export default function TrackerApp() {
     const missingQuotes = requestedInstruments.filter((item) => !item.quote).map((item) => item.instrument);
     const requiresDates = requestedInstruments.some((item) => item.instrument !== "BONDDIA");
     if (requestedInstruments.length === 0) {
-      setMessage("Captura al menos un monto mayor a cero.");
+      const text = "Captura al menos un monto mayor a cero.";
+      setMessage(text);
+      setInvestmentMessage(text);
       return;
     }
 
     if (missingQuotes.length > 0 || typeof inflationRate !== "number") {
-      setMessage(`Faltan tasas para ${missingQuotes.join(", ") || "los instrumentos seleccionados"} o inflación.`);
+      const text = `Faltan tasas para ${missingQuotes.join(", ") || "los instrumentos seleccionados"} o inflación.`;
+      setMessage(text);
+      setInvestmentMessage(text);
       return;
     }
 
     if (typeof provisionalWithholdingRate !== "number") {
-      setMessage("Falta la retención provisional Art. 24 LIF. Actualízala en Configuración.");
+      const text = "Falta la retención provisional Art. 24 LIF. Actualízala en Configuración.";
+      setMessage(text);
+      setInvestmentMessage(text);
       return;
     }
 
     if (requiresDates && (!auctionDate || !maturityDate)) {
-      setMessage("Captura la fecha de subasta y la fecha de vencimiento.");
+      const text = "Captura la fecha de subasta y la fecha de vencimiento.";
+      setMessage(text);
+      setInvestmentMessage(text);
       return;
     }
 
     if (requiresDates && maturityDate <= auctionDate) {
-      setMessage("La fecha de vencimiento debe ser posterior a la fecha de subasta.");
+      const text = "La fecha de vencimiento debe ser posterior a la fecha de subasta.";
+      setMessage(text);
+      setInvestmentMessage(text);
       return;
     }
 
@@ -276,11 +303,19 @@ export default function TrackerApp() {
     });
 
     try {
+      setBusy("investment");
       await saveInvestmentLots(userId, nextLots);
-      setMessage("Inversión mensual guardada como lotes independientes.");
+      const text = `Inversión guardada: ${nextLots.map((lot) => `${lot.instrument} ${formatCurrency(lot.amount)}`).join(", ")}.`;
+      setMessage(text);
+      setInvestmentMessage(text);
+      setInvestmentAmounts(EMPTY_AMOUNTS);
       await loadData(userId);
     } catch (error) {
-      setMessage(`No se pudo guardar la inversión en Supabase: ${readableError(error)}`);
+      const text = `No se pudo guardar la inversión en Supabase: ${readableError(error)}`;
+      setMessage(text);
+      setInvestmentMessage(text);
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -549,23 +584,29 @@ export default function TrackerApp() {
               <label className="grid gap-1 text-sm font-medium">
                 Fecha de subasta
                 <input
-                  className="h-10 rounded-md border border-[var(--line)] px-3"
+                  className="h-10 rounded-md border border-[var(--line)] px-3 disabled:bg-[#eef2ef] disabled:text-[var(--muted)]"
                   type="date"
                   value={auctionDate}
+                  disabled={!requiresInvestmentDates}
                   onChange={(event) => setAuctionDate(event.target.value)}
                 />
-                <span className="text-xs font-normal text-[var(--muted)]">Opcional para BONDDIA.</span>
+                <span className="text-xs font-normal text-[var(--muted)]">
+                  Se usa solo para BONOS, UDIBONOS y CETES.
+                </span>
               </label>
               <label className="grid gap-1 text-sm font-medium">
                 Fecha de vencimiento
                 <input
-                  className="h-10 rounded-md border border-[var(--line)] px-3"
+                  className="h-10 rounded-md border border-[var(--line)] px-3 disabled:bg-[#eef2ef] disabled:text-[var(--muted)]"
                   type="date"
                   value={maturityDate}
+                  disabled={!requiresInvestmentDates}
                   onChange={(event) => setMaturityDate(event.target.value)}
                   min={auctionDate}
                 />
-                <span className="text-xs font-normal text-[var(--muted)]">Opcional para BONDDIA.</span>
+                <span className="text-xs font-normal text-[var(--muted)]">
+                  BONDDIA se guarda sin vencimiento.
+                </span>
               </label>
             </div>
             {INSTRUMENT_TYPES.map((instrument) => (
@@ -585,10 +626,16 @@ export default function TrackerApp() {
             <button
               className="mt-2 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[var(--foreground)] px-4 text-sm font-semibold text-white"
               onClick={saveMonthlyInvestment}
+              disabled={busy === "investment"}
             >
               <Database size={16} />
-              Guardar inversión
+              {busy === "investment" ? "Guardando" : "Guardar inversión"}
             </button>
+            {investmentMessage ? (
+              <div className="rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm text-[var(--muted)]">
+                {investmentMessage}
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-5 rounded-md bg-[#eef6f3] p-3 text-xs leading-5 text-[var(--muted)]">
@@ -721,30 +768,41 @@ export default function TrackerApp() {
                   <th className="px-4 py-3">Instrumento</th>
                   <th className="px-4 py-3">Monto</th>
                   <th className="px-4 py-3">Tasa</th>
-                  <th className="px-4 py-3">ISR prov. anual</th>
+                  <th className="px-4 py-3">ISR prov. anual base</th>
                   <th className="px-4 py-3">Vencimiento</th>
                 </tr>
               </thead>
               <tbody>
-                {nextMaturities.length > 0 ? (
-                  nextMaturities.map((lot) => (
+                {lotRows.length > 0 ? (
+                  lotRows.map((lot) => (
                     <tr className="border-t border-[var(--line)]" key={lot.id}>
                       <td className="px-4 py-3">{formatIsoDate(lot.date)}</td>
                       <td className="px-4 py-3 font-semibold">{lot.instrument}</td>
                       <td className="px-4 py-3">{formatCurrency(lot.amount)}</td>
                       <td className="px-4 py-3">{formatPercent(lot.annualRate)}</td>
                       <td className="px-4 py-3">{formatCurrency(lot.estimatedAnnualWithholding ?? 0)}</td>
-                      <td className="px-4 py-3">{formatIsoDate(lot.maturityDate)}</td>
+                      <td className="px-4 py-3">{lot.maturityDate ? formatIsoDate(lot.maturityDate) : "No Aplica"}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
                     <td className="px-4 py-6 text-[var(--muted)]" colSpan={6}>
-                      Guarda una inversión mensual para ver su fecha de vencimiento.
+                      Guarda una inversión mensual para ver sus lotes.
                     </td>
                   </tr>
                 )}
               </tbody>
+              {lotRows.length > 0 ? (
+                <tfoot className="border-t border-[var(--line)] bg-[#eef2ef] font-semibold">
+                  <tr>
+                    <td className="px-4 py-3" colSpan={2}>
+                      Total
+                    </td>
+                    <td className="px-4 py-3">{formatCurrency(lotRowsTotal)}</td>
+                    <td className="px-4 py-3" colSpan={3} />
+                  </tr>
+                </tfoot>
+              ) : null}
             </table>
           </div>
         </div>
@@ -770,7 +828,7 @@ export default function TrackerApp() {
               <div className="grid grid-cols-3 gap-2 text-sm">
                 <MiniMetric title="Nominal" value={formatCurrency(currentTaxEstimate.nominalInterest)} />
                 <MiniMetric title="Acumulable" value={formatCurrency(currentTaxEstimate.realInterest)} />
-                <MiniMetric title="ISR prov." value={formatCurrency(currentTaxEstimate.isrWithheld)} />
+                <MiniMetric title="ISR prov. año fiscal" value={formatCurrency(currentTaxEstimate.isrWithheld)} />
               </div>
             </div>
 
@@ -782,7 +840,7 @@ export default function TrackerApp() {
                     <th className="px-3 py-2">Lotes</th>
                     <th className="px-3 py-2">Nominal</th>
                     <th className="px-3 py-2">Acumulable</th>
-                    <th className="px-3 py-2">ISR</th>
+                    <th className="px-3 py-2">ISR año fiscal</th>
                   </tr>
                 </thead>
                 <tbody>
