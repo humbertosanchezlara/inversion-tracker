@@ -1,3 +1,7 @@
+export function firstDayOfMonth(month: string) {
+  return `${month}-01`;
+}
+
 export function addYearsIsoDate(isoDate: string, years: number) {
   const [year, month, day] = isoDate.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));

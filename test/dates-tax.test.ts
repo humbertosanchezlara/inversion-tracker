@@ -96,4 +96,27 @@ describe("tax declaration tracking", () => {
     expect(summary.realInterest).toBeCloseTo(1104, 0);
     expect(summary.isrWithheld).toBeCloseTo(165.6, 0);
   });
+
+  it("uses the registered month when BONDDIA has no auction or maturity dates", () => {
+    const lots: InvestmentLot[] = [
+      {
+        id: "lot-1",
+        month: "2026-05",
+        instrument: "BONDDIA",
+        amount: 10_000,
+        annualRate: 0.08,
+        inflationRate: 0.04,
+        provisionalWithholdingRate: 0.009,
+        estimatedAnnualWithholding: 90,
+        termYears: 1,
+        createdAt: "2026-05-01T00:00:00.000Z",
+      },
+    ];
+
+    const summary = estimateTaxDeclarationFromLots(lots, 2026);
+
+    expect(summary.lines[0].instrument).toBe("BONDDIA");
+    expect(summary.nominalInterest).toBeGreaterThan(0);
+    expect(summary.nominalInterest).toBeLessThan(800);
+  });
 });

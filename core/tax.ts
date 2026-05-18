@@ -1,3 +1,4 @@
+import { firstDayOfMonth } from "./dates";
 import { INSTRUMENT_TYPES } from "./types";
 import type {
   InvestmentLot,
@@ -44,7 +45,7 @@ function daysInFiscalYear(fiscalYear: number) {
 function activeDaysInYear(lot: InvestmentLot, fiscalYear: number) {
   const yearStart = Date.UTC(fiscalYear, 0, 1);
   const yearEnd = Date.UTC(fiscalYear, 11, 31);
-  const lotStart = utcDate(lot.date);
+  const lotStart = utcDate(lot.date ?? firstDayOfMonth(lot.month));
   const lotEnd = lot.maturityDate ? utcDate(lot.maturityDate) : yearEnd;
   const start = Math.max(yearStart, lotStart);
   const end = Math.min(yearEnd, lotEnd);

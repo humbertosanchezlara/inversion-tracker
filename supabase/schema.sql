@@ -7,9 +7,13 @@ create table if not exists public.investment_lots (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   month text not null check (month ~ '^\d{4}-\d{2}$'),
-  investment_date date not null,
-  maturity_date date not null,
+  investment_date date,
+  maturity_date date,
   instrument text not null check (instrument in ('BONOS', 'UDIBONOS', 'CETES', 'BONDDIA')),
+  check (
+    instrument = 'BONDDIA'
+    or (investment_date is not null and maturity_date is not null)
+  ),
   amount numeric(14, 2) not null check (amount >= 0),
   annual_rate numeric(10, 6) not null check (annual_rate >= 0),
   inflation_rate numeric(10, 6) not null check (inflation_rate >= 0),

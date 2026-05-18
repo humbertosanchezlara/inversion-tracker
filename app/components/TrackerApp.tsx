@@ -13,7 +13,7 @@ import {
   saveTaxDeclarationRecord,
 } from "@/data/supabaseRepository";
 import { projectPortfolio, summarizeProjection } from "@/core/projection";
-import { formatIsoDate, addYearsIsoDate } from "@/core/dates";
+import { formatIsoDate, addYearsIsoDate, firstDayOfMonth } from "@/core/dates";
 import { estimateTaxDeclarationFromLots, summarizeTaxDeclaration } from "@/core/tax";
 import {
   CURRENT_LIF_ARTICLE_24_WITHHOLDING_RATE,
@@ -57,10 +57,15 @@ function latestUsableSnapshot(snapshots: MarketSnapshot[]) {
 
 function normalizeLot(lot: InvestmentLot): InvestmentLot {
   const provisionalWithholdingRate = lot.provisionalWithholdingRate ?? CURRENT_LIF_ARTICLE_24_WITHHOLDING_RATE;
+  const fallbackDate = firstDayOfMonth(lot.month);
+  const date = lot.date ?? (lot.instrument === "BONDDIA" ? undefined : fallbackDate);
 
   return {
     ...lot,
-    maturityDate: lot.maturityDate || addYearsIsoDate(lot.date, lotTermYears(lot.instrument, lot.termYears)),
+    date,
+    maturityDate:
+      lot.maturityDate ||
+      (lot.instrument === "BONDDIA" ? undefined : addYearsIsoDate(date ?? fallbackDate, lotTermYears(lot.instrument, lot.termYears))),
     provisionalWithholdingRate,
     estimatedAnnualWithholding:
       lot.estimatedAnnualWithholding ?? estimateAnnualWithholding(lot.amount, provisionalWithholdingRate),
@@ -83,6 +88,8 @@ export default function TrackerApp() {
   const [analyses, setAnalyses] = useState<MonthlyAnalysis[]>([]);
   const [taxRecords, setTaxRecords] = useState<TaxDeclarationRecord[]>([]);
   const [month, setMonth] = useState(monthKey());
+  const [auctionDate, setAuctionDate] = useState(firstDayOfMonth(monthKey()));
+  const [maturityDate, setMaturityDate] = useState(addYearsIsoDate(firstDayOfMonth(monthKey()), 10));
   const [investmentAmounts, setInvestmentAmounts] = useState<Record<InstrumentType, string>>(DEFAULT_AMOUNTS);
   const [fiscalYear, setFiscalYear] = useState(String(new Date().getFullYear()));
   const [taxInstrument, setTaxInstrument] = useState<TaxDeclarationRecord["instrument"]>("BONOS");
@@ -152,7 +159,7 @@ export default function TrackerApp() {
   const nextMaturities = useMemo(
     () =>
       lots
-        .filter((lot) => lot.maturityDate)
+        .filter((lot): lot is InvestmentLot & { maturityDate: string } => Boolean(lot.maturityDate))
         .slice()
         .sort((a, b) => a.maturityDate.localeCompare(b.maturityDate))
         .slice(0, 6),
@@ -176,6 +183,12 @@ export default function TrackerApp() {
       return acc;
     }, {});
   }, [lots]);
+
+  function updateMonth(nextMonth: string) {
+    setMonth(nextMonth);
+    setAuctionDate(firstDayOfMonth(nextMonth));
+    setMaturityDate(addYearsIsoDate(firstDayOfMonth(nextMonth), 10));
+  }
 
   async function refreshMarketData() {
     if (!userId) return;
@@ -215,6 +228,7 @@ export default function TrackerApp() {
     const inflationRate = activeSnapshot.inflationAnnual;
     const provisionalWithholdingRate = activeSnapshot.provisionalWithholdingRate;
     const missingQuotes = requestedInstruments.filter((item) => !item.quote).map((item) => item.instrument);
+    const requiresDates = requestedInstruments.some((item) => item.instrument !== "BONDDIA");
     if (requestedInstruments.length === 0) {
       setMessage("Captura al menos un monto mayor a cero.");
       return;
@@ -230,15 +244,24 @@ export default function TrackerApp() {
       return;
     }
 
+    if (requiresDates && (!auctionDate || !maturityDate)) {
+      setMessage("Captura la fecha de subasta y la fecha de vencimiento.");
+      return;
+    }
+
+    if (requiresDates && maturityDate <= auctionDate) {
+      setMessage("La fecha de vencimiento debe ser posterior a la fecha de subasta.");
+      return;
+    }
+
     const now = new Date().toISOString();
-    const date = `${month}-01`;
     const nextLots: InvestmentLot[] = requestedInstruments.map(({ instrument, amount, quote: instrumentQuote }) => {
       const termYears = lotTermYears(instrument, instrumentQuote?.termYears);
       return {
         id: newId(),
         month,
-        date,
-        maturityDate: addYearsIsoDate(date, termYears),
+        date: instrument === "BONDDIA" ? undefined : auctionDate,
+        maturityDate: instrument === "BONDDIA" ? undefined : maturityDate,
         instrument,
         amount,
         annualRate: instrumentQuote?.annualRate ?? 0,
@@ -519,9 +542,32 @@ export default function TrackerApp() {
                 className="h-10 rounded-md border border-[var(--line)] px-3"
                 type="month"
                 value={month}
-                onChange={(event) => setMonth(event.target.value)}
+                onChange={(event) => updateMonth(event.target.value)}
               />
             </label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm font-medium">
+                Fecha de subasta
+                <input
+                  className="h-10 rounded-md border border-[var(--line)] px-3"
+                  type="date"
+                  value={auctionDate}
+                  onChange={(event) => setAuctionDate(event.target.value)}
+                />
+                <span className="text-xs font-normal text-[var(--muted)]">Opcional para BONDDIA.</span>
+              </label>
+              <label className="grid gap-1 text-sm font-medium">
+                Fecha de vencimiento
+                <input
+                  className="h-10 rounded-md border border-[var(--line)] px-3"
+                  type="date"
+                  value={maturityDate}
+                  onChange={(event) => setMaturityDate(event.target.value)}
+                  min={auctionDate}
+                />
+                <span className="text-xs font-normal text-[var(--muted)]">Opcional para BONDDIA.</span>
+              </label>
+            </div>
             {INSTRUMENT_TYPES.map((instrument) => (
               <label className="grid gap-1 text-sm font-medium" key={instrument}>
                 {INSTRUMENT_LABELS[instrument]}
@@ -671,7 +717,7 @@ export default function TrackerApp() {
             <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-[#eef2ef] text-left">
                 <tr>
-                  <th className="px-4 py-3">Inversión</th>
+                  <th className="px-4 py-3">Subasta</th>
                   <th className="px-4 py-3">Instrumento</th>
                   <th className="px-4 py-3">Monto</th>
                   <th className="px-4 py-3">Tasa</th>

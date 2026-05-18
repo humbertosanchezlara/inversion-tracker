@@ -12,8 +12,8 @@ export const INSTRUMENT_LABELS: Record<InstrumentType, string> = {
 export type InvestmentLot = {
   id: string;
   month: string;
-  date: string;
-  maturityDate: string;
+  date?: string;
+  maturityDate?: string;
   instrument: InstrumentType;
   amount: number;
   annualRate: number;
