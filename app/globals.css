@@ -1,15 +1,36 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
-  --background: #f7f8f7;
-  --foreground: #17201a;
-  --muted: #5f6f66;
-  --line: #dce3dd;
-  --panel: #ffffff;
-  --accent: #0f766e;
-  --accent-strong: #115e59;
-  --warning: #9a5b05;
+  color-scheme: dark;
+
+  /* base */
+  --background: #0b0e10;
+  --background-2: #11161a;
+  --foreground: #eaeef2;
+  --text-soft: #a8b0b7;
+  --muted: #6b7480;
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-2: rgba(255, 255, 255, 0.04);
+
+  /* glass panel */
+  --panel-bg: rgba(22, 28, 34, 0.62);
+  --panel-bg-hi: rgba(36, 44, 52, 0.72);
+
+  /* instrument hues */
+  --bonos: #67e8c8;
+  --udibonos: #f5c16c;
+  --cetes: #7aa9f7;
+  --bonddia: #c594f1;
+
+  /* semantic */
+  --accent: var(--bonos);
+  --warn: #f87171;
+
+  /* legacy aliases while the dashboard is migrated */
+  --line: var(--hairline);
+  --panel: var(--panel-bg);
+  --accent-strong: var(--bonos);
+  --warning: var(--warn);
 }
 
 * {
@@ -21,13 +42,24 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
 button,
 input,
 select {
   font: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  color: inherit;
 }
 
 button:disabled {
