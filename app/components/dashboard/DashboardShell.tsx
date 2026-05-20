@@ -10,6 +10,7 @@ import AIAnalysisPanel from "./AIAnalysisPanel";
 import ProjectionPanel from "./ProjectionPanel";
 import AllocationDonut from "./AllocationDonut";
 import UpcomingMaturities from "./UpcomingMaturities";
+import YieldCurveChart from "./YieldCurveChart";
 import type {
   InstrumentType,
   InvestmentLot,
@@ -153,7 +154,7 @@ export default function DashboardShell(props: DashboardShellProps) {
               <UpcomingMaturities lots={props.upcomingMaturities} />
             </div>
           </div>
-          <div className="min-h-[420px] rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] backdrop-blur-2xl" />
+          <YieldCurveChart quotes={props.curveQuotes} />
         </section>
       </div>
       {isRegisterOpen ? (
