@@ -7,6 +7,9 @@ import TopBar from "./TopBar";
 import PortfolioHero from "./PortfolioHero";
 import InstrumentCard from "./InstrumentCard";
 import AIAnalysisPanel from "./AIAnalysisPanel";
+import ProjectionPanel from "./ProjectionPanel";
+import AllocationDonut from "./AllocationDonut";
+import UpcomingMaturities from "./UpcomingMaturities";
 import type {
   InstrumentType,
   InvestmentLot,
@@ -140,10 +143,14 @@ export default function DashboardShell(props: DashboardShellProps) {
             onRunAnalysis={props.runMonthlyAnalysis}
           />
           <div className="grid gap-[14px] xl:grid-cols-[1.55fr_1fr]">
-            <div className="min-h-[360px] rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] backdrop-blur-2xl" />
+            <ProjectionPanel chartData={props.chartData} summaries={props.summaries} />
             <div className="grid gap-[14px]">
-              <div className="min-h-[172px] rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] backdrop-blur-2xl" />
-              <div className="min-h-[174px] rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] backdrop-blur-2xl" />
+              <AllocationDonut
+                currentAllocation={currentAllocation}
+                targetAllocation={props.latestAnalysis?.targetAllocation}
+                totalInvested={props.totalInvested}
+              />
+              <UpcomingMaturities lots={props.upcomingMaturities} />
             </div>
           </div>
           <div className="min-h-[420px] rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] backdrop-blur-2xl" />
