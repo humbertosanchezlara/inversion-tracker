@@ -6,6 +6,7 @@ import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import PortfolioHero from "./PortfolioHero";
 import InstrumentCard from "./InstrumentCard";
+import AIAnalysisPanel from "./AIAnalysisPanel";
 import type {
   InstrumentType,
   InvestmentLot,
@@ -69,6 +70,7 @@ export type DashboardShellProps = {
 export default function DashboardShell(props: DashboardShellProps) {
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const currentValue = estimateCurrentValue(props.lots);
+  const currentAllocation = calculateAllocation(props.lots, props.totalInvested);
   const previousSnapshot = findPreviousSnapshot(props.snapshots, props.activeSnapshot);
   const instruments = INSTRUMENT_TYPES.map((instrument) => {
     const activeQuote = quote(props.activeSnapshot, instrument);
@@ -129,7 +131,14 @@ export default function DashboardShell(props: DashboardShellProps) {
               ))}
             </div>
           </div>
-          <div className="min-h-[440px] rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] backdrop-blur-2xl" />
+          <AIAnalysisPanel
+            analysisMessage={props.analysisMessage}
+            busy={props.busy}
+            currentAllocation={currentAllocation}
+            latestAnalysis={props.latestAnalysis}
+            month={props.month}
+            onRunAnalysis={props.runMonthlyAnalysis}
+          />
           <div className="grid gap-[14px] xl:grid-cols-[1.55fr_1fr]">
             <div className="min-h-[360px] rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] backdrop-blur-2xl" />
             <div className="grid gap-[14px]">
@@ -167,6 +176,17 @@ export default function DashboardShell(props: DashboardShellProps) {
       ) : null}
     </main>
   );
+}
+
+function calculateAllocation(lots: InvestmentLot[], totalInvested: number): Record<InstrumentType, number> {
+  const allocation = { BONOS: 0, UDIBONOS: 0, CETES: 0, BONDDIA: 0 } satisfies Record<InstrumentType, number>;
+  if (totalInvested <= 0) return allocation;
+
+  for (const lot of lots) {
+    allocation[lot.instrument] += (lot.amount / totalInvested) * 100;
+  }
+
+  return allocation;
 }
 
 function quote(snapshot: MarketSnapshot | undefined, instrument: InstrumentType, termYears?: number) {
