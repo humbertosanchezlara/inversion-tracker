@@ -513,6 +513,7 @@ export default function TrackerApp() {
       setTaxNotes={setTaxNotes}
       setIsrWithheld={setIsrWithheld}
       signOut={signOut}
+      snapshots={snapshots}
       summaries={summaries}
       taxInstrument={taxInstrument}
       taxNotes={taxNotes}

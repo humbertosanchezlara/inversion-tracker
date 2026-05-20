@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, type Dispatch, type SetStateAction } from "react";
+import { INSTRUMENT_TYPES } from "@/core/types";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import PortfolioHero from "./PortfolioHero";
+import InstrumentCard from "./InstrumentCard";
 import type {
   InstrumentType,
   InvestmentLot,
@@ -54,6 +57,7 @@ export type DashboardShellProps = {
   setTaxInstrument: Dispatch<SetStateAction<TaxDeclarationRecord["instrument"]>>;
   setTaxNotes: Dispatch<SetStateAction<string>>;
   signOut: () => Promise<void>;
+  snapshots: MarketSnapshot[];
   summaries: ProjectionSummary[];
   taxInstrument: TaxDeclarationRecord["instrument"];
   taxNotes: string;
@@ -64,6 +68,25 @@ export type DashboardShellProps = {
 
 export default function DashboardShell(props: DashboardShellProps) {
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const currentValue = estimateCurrentValue(props.lots);
+  const previousSnapshot = findPreviousSnapshot(props.snapshots, props.activeSnapshot);
+  const instruments = INSTRUMENT_TYPES.map((instrument) => {
+    const activeQuote = quote(props.activeSnapshot, instrument);
+    const previousQuote = quote(previousSnapshot, instrument, activeQuote?.termYears);
+    const invested = props.lots
+      .filter((lot) => lot.instrument === instrument)
+      .reduce((sum, lot) => sum + lot.amount, 0);
+
+    return {
+      changeBps:
+        typeof activeQuote?.annualRate === "number" && typeof previousQuote?.annualRate === "number"
+          ? (activeQuote.annualRate - previousQuote.annualRate) * 10000
+          : 0,
+      instrument,
+      invested,
+      quote: activeQuote,
+    };
+  });
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
@@ -88,12 +111,20 @@ export default function DashboardShell(props: DashboardShellProps) {
             </div>
           ) : null}
           <div className="grid gap-[14px] xl:grid-cols-[1fr_2.4fr]">
-            <div className="min-h-[196px] rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] backdrop-blur-2xl" />
+            <PortfolioHero
+              currentValue={currentValue}
+              inflation={props.activeSnapshot?.inflationAnnual}
+              lotsCount={props.lots.length}
+              totalInvested={props.totalInvested}
+            />
             <div className="grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div
-                  className="min-h-[196px] rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] backdrop-blur-2xl"
-                  key={index}
+              {instruments.map((item) => (
+                <InstrumentCard
+                  changeBps={item.changeBps}
+                  instrument={item.instrument}
+                  invested={item.invested}
+                  key={item.instrument}
+                  quote={item.quote}
                 />
               ))}
             </div>
@@ -136,6 +167,36 @@ export default function DashboardShell(props: DashboardShellProps) {
       ) : null}
     </main>
   );
+}
+
+function quote(snapshot: MarketSnapshot | undefined, instrument: InstrumentType, termYears?: number) {
+  return (
+    snapshot?.quotes.find((item) => item.instrument === instrument && item.termYears === termYears) ??
+    snapshot?.quotes.find((item) => item.instrument === instrument && item.termYears === 10) ??
+    snapshot?.quotes.find((item) => item.instrument === instrument)
+  );
+}
+
+function findPreviousSnapshot(snapshots: MarketSnapshot[], activeSnapshot?: MarketSnapshot) {
+  if (!activeSnapshot) return undefined;
+
+  return snapshots
+    .filter((snapshot) => snapshot.id !== activeSnapshot.id && snapshot.quotes.length > 0)
+    .sort((a, b) => b.fetchedAt.localeCompare(a.fetchedAt))
+    .find((snapshot) => snapshot.fetchedAt <= activeSnapshot.fetchedAt);
+}
+
+function estimateCurrentValue(lots: InvestmentLot[]) {
+  const now = Date.now();
+
+  return lots.reduce((sum, lot) => {
+    const startDate = new Date(lot.date ?? lot.createdAt).getTime();
+    const maturityDate = lot.maturityDate ? new Date(lot.maturityDate).getTime() : now;
+    const endDate = Math.min(now, Number.isFinite(maturityDate) ? maturityDate : now);
+    const elapsedYears = Math.max(0, (endDate - startDate) / (365.25 * 24 * 60 * 60 * 1000));
+
+    return sum + lot.amount * (1 + lot.annualRate) ** elapsedYears;
+  }, 0);
 }
 
 function BackgroundMesh() {
