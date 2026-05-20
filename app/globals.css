@@ -66,3 +66,18 @@ button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
+
+.dashboard-skeleton {
+  background: linear-gradient(90deg, var(--panel-bg), var(--panel-bg-hi), var(--panel-bg));
+  background-size: 220% 100%;
+  animation: dashboard-shimmer 1.45s ease-in-out infinite;
+}
+
+@keyframes dashboard-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}

@@ -4,10 +4,11 @@ type PortfolioHeroProps = {
   currentValue: number;
   inflation?: number;
   lotsCount: number;
+  onOpenRegister: () => void;
   totalInvested: number;
 };
 
-export default function PortfolioHero({ currentValue, inflation, lotsCount, totalInvested }: PortfolioHeroProps) {
+export default function PortfolioHero({ currentValue, inflation, lotsCount, onOpenRegister, totalInvested }: PortfolioHeroProps) {
   const gain = currentValue - totalInvested;
   const gainPct = totalInvested > 0 ? gain / totalInvested : 0;
   const sparkValues = buildSparkValues(totalInvested, currentValue);
@@ -17,6 +18,22 @@ export default function PortfolioHero({ currentValue, inflation, lotsCount, tota
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(103,232,200,0.06),transparent_70%)]" />
       <div className="relative">
         <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Valor actual</p>
+        {lotsCount === 0 ? (
+          <div className="mt-4">
+            <p className="text-[18px] font-semibold tracking-[-0.015em]">Empieza tu primera inversión</p>
+            <p className="mt-2 max-w-[260px] text-[12px] leading-6 text-[var(--text-soft)]">
+              Registra un lote mensual para activar proyección, allocation y vencimientos.
+            </p>
+            <button
+              className="mt-4 rounded-full bg-[var(--foreground)] px-3.5 py-2 text-[12px] font-semibold text-[var(--background)]"
+              onClick={onOpenRegister}
+              type="button"
+            >
+              + Registrar mes
+            </button>
+          </div>
+        ) : (
+          <>
         <div className="mt-2 flex items-baseline gap-1.5">
           <span className="font-mono text-[36px] font-medium leading-none tracking-[-0.025em] text-[var(--foreground)]">
             {formatCurrency(currentValue || totalInvested)}
@@ -37,6 +54,8 @@ export default function PortfolioHero({ currentValue, inflation, lotsCount, tota
           <MiniStat label="Lotes" value={String(lotsCount)} />
           <MiniStat label="Inflación" value={formatPercent(inflation)} />
         </div>
+          </>
+        )}
       </div>
     </section>
   );

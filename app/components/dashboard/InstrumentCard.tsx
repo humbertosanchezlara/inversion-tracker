@@ -38,7 +38,7 @@ export default function InstrumentCard({ changeBps, instrument, invested, quote 
         </span>
       </div>
       <div className="relative mt-3 font-mono text-[28px] font-medium leading-none tracking-[-0.025em]">
-        {formatPercent(quote?.annualRate).replace("%", "")}
+        {quote ? formatPercent(quote.annualRate).replace("%", "") : "N/D"}
         <span className="text-[13px] text-[var(--muted)]">%</span>
       </div>
       <p className="relative mt-1 text-[10px] text-[var(--muted)]">

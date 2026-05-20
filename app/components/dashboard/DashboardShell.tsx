@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type Dispatch, type SetStateAction } from "react";
-import { INSTRUMENT_TYPES } from "@/core/types";
+import { INSTRUMENT_LABELS, INSTRUMENT_TYPES } from "@/core/types";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import PortfolioHero from "./PortfolioHero";
@@ -106,6 +106,7 @@ export default function DashboardShell(props: DashboardShellProps) {
             onOpenRegister={() => setIsRegisterOpen(true)}
             onRefreshMarketData={props.refreshMarketData}
           />
+          <MobileNav />
           {props.message ? (
             <div className="rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg-hi)] px-4 py-3 text-[12px] leading-5 text-[var(--text-soft)] backdrop-blur-2xl">
               {props.message}
@@ -121,6 +122,7 @@ export default function DashboardShell(props: DashboardShellProps) {
               currentValue={currentValue}
               inflation={props.activeSnapshot?.inflationAnnual}
               lotsCount={props.lots.length}
+              onOpenRegister={() => setIsRegisterOpen(true)}
               totalInvested={props.totalInvested}
             />
             <div className="grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
@@ -160,7 +162,7 @@ export default function DashboardShell(props: DashboardShellProps) {
       {isRegisterOpen ? (
         <div className="fixed inset-0 z-20 flex justify-end bg-black/45 backdrop-blur-sm" onClick={() => setIsRegisterOpen(false)}>
           <div
-            className="h-full w-full max-w-md border-l border-[var(--hairline)] bg-[var(--background-2)] p-5 shadow-2xl"
+            className="h-full w-full max-w-md overflow-y-auto border-l border-[var(--hairline)] bg-[var(--background-2)] p-5 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -176,13 +178,111 @@ export default function DashboardShell(props: DashboardShellProps) {
                 Cerrar
               </button>
             </div>
-            <p className="mt-6 text-[12px] leading-6 text-[var(--text-soft)]">
-              El formulario existente se conectará aquí en el siguiente bloque de componentes.
-            </p>
+            <MonthlyInvestmentForm props={props} />
           </div>
         </div>
       ) : null}
     </main>
+  );
+}
+
+function MobileNav() {
+  const nav = [
+    { label: "Resumen", icon: "◐", href: "/" },
+    { label: "Vencimientos", icon: "◷", href: "/vencimientos" },
+    { label: "Análisis", icon: "✦", href: "/analisis" },
+    { label: "Fiscal", icon: "§", href: "/fiscal" },
+  ];
+
+  return (
+    <nav className="grid grid-cols-4 gap-1 rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] p-1 backdrop-blur-2xl lg:hidden">
+      {nav.map((item) => (
+        <a
+          className="flex min-h-10 flex-col items-center justify-center gap-1 rounded-xl text-[10px] text-[var(--text-soft)] first:bg-white/[0.06] first:text-[var(--foreground)]"
+          href={item.href}
+          key={item.label}
+        >
+          <span className="font-mono text-[13px]">{item.icon}</span>
+          <span className="truncate">{item.label}</span>
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+function MonthlyInvestmentForm({ props }: { props: DashboardShellProps }) {
+  return (
+    <div className="mt-6 grid gap-4">
+      <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-soft)]">
+        Mes
+        <input
+          className="h-10 rounded-xl border border-[var(--hairline)] bg-white/[0.04] px-3 font-mono text-[12px] text-[var(--foreground)] outline-none focus:border-[rgba(103,232,200,0.45)]"
+          onChange={(event) => props.updateMonth(event.target.value)}
+          type="month"
+          value={props.month}
+        />
+      </label>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-soft)]">
+          Fecha de subasta
+          <input
+            className="h-10 rounded-xl border border-[var(--hairline)] bg-white/[0.04] px-3 font-mono text-[12px] text-[var(--foreground)] outline-none disabled:text-[var(--muted)]"
+            disabled={!props.requiresInvestmentDates}
+            onChange={(event) => props.setAuctionDate(event.target.value)}
+            type="date"
+            value={props.auctionDate}
+          />
+        </label>
+        <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-soft)]">
+          Fecha de vencimiento
+          <input
+            className="h-10 rounded-xl border border-[var(--hairline)] bg-white/[0.04] px-3 font-mono text-[12px] text-[var(--foreground)] outline-none disabled:text-[var(--muted)]"
+            disabled={!props.requiresInvestmentDates}
+            min={props.auctionDate}
+            onChange={(event) => props.setMaturityDate(event.target.value)}
+            type="date"
+            value={props.maturityDate}
+          />
+        </label>
+      </div>
+
+      <div className="grid gap-3">
+        {INSTRUMENT_TYPES.map((instrument) => (
+          <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-soft)]" key={instrument}>
+            {INSTRUMENT_LABELS[instrument]}
+            <input
+              className="h-10 rounded-xl border border-[var(--hairline)] bg-white/[0.04] px-3 font-mono text-[12px] text-[var(--foreground)] outline-none focus:border-[rgba(103,232,200,0.45)]"
+              min="0"
+              onChange={(event) =>
+                props.setInvestmentAmounts((current) => ({ ...current, [instrument]: event.target.value }))
+              }
+              type="number"
+              value={props.investmentAmounts[instrument]}
+            />
+          </label>
+        ))}
+      </div>
+
+      <button
+        className="mt-1 h-10 rounded-full bg-[var(--foreground)] px-4 text-[12px] font-semibold text-[var(--background)]"
+        disabled={props.busy === "investment"}
+        onClick={props.saveMonthlyInvestment}
+        type="button"
+      >
+        {props.busy === "investment" ? "Guardando" : "Guardar inversión"}
+      </button>
+
+      {props.investmentMessage ? (
+        <div className="rounded-xl border border-[var(--hairline)] bg-white/[0.04] px-3 py-2 text-[12px] leading-5 text-[var(--text-soft)]">
+          {props.investmentMessage}
+        </div>
+      ) : null}
+
+      <div className="rounded-xl border border-[var(--hairline)] bg-white/[0.03] px-3 py-2 text-[11px] leading-5 text-[var(--muted)]">
+        Snapshot activo: {props.activeSnapshot ? new Date(props.activeSnapshot.fetchedAt).toLocaleString("es-MX") : "N/D"}.
+      </div>
+    </div>
   );
 }
 
