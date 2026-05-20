@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { BarChart3, Brain, CalendarClock, Database, FileText, LogOut, RefreshCw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import DashboardShell from "@/app/components/dashboard/DashboardShell";
 import {
   loadCloudData,
   saveInvestmentLots,
@@ -21,7 +20,7 @@ import {
 } from "@/core/market";
 import { INSTRUMENT_LABELS, INSTRUMENT_TYPES } from "@/core/types";
 import type { InstrumentType, InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
-import { formatCurrency, formatPercent, monthKey } from "@/lib/format";
+import { formatCurrency, monthKey } from "@/lib/format";
 
 const HORIZONS = [10, 15, 20, 25, 30];
 const DEFAULT_AMOUNTS: Record<InstrumentType, string> = {
@@ -477,505 +476,50 @@ export default function TrackerApp() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
-      <header className="flex flex-col justify-between gap-4 border-b border-[var(--line)] pb-5 lg:flex-row lg:items-end">
-        <div>
-          <p className="text-sm font-semibold text-[var(--accent)]">Tracker mensual</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-normal">CETES Directo</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-            Registra cuánto invertiste cada mes en BONOS, UDIBONOS, CETES y BONDDIA, guarda las tasas usadas y proyecta
-            retornos. El análisis OpenAI es informativo y no ejecuta compras.
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[var(--accent)] px-4 text-sm font-semibold text-white"
-            onClick={refreshMarketData}
-            disabled={busy === "market"}
-          >
-            <RefreshCw size={16} />
-            {busy === "market" ? "Actualizando" : "Actualizar fuentes"}
-          </button>
-          <button
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[var(--line)] bg-white px-4 text-sm font-semibold"
-            onClick={signOut}
-          >
-            <LogOut size={16} />
-            Salir
-          </button>
-        </div>
-      </header>
-
-      {message ? (
-        <div className="rounded-md border border-[var(--line)] bg-white px-4 py-3 text-sm text-[var(--muted)]">
-          {message}
-        </div>
-      ) : null}
-
-      {missingManualConfig ? (
-        <div className="rounded-md border border-[#e7c46b] bg-[#fff8e6] px-4 py-3 text-sm text-[#6f4a00]">
-          No hay datos automáticos completos. Actualiza fuentes para poder registrar inversiones y proyectar.
-        </div>
-      ) : null}
-
-      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-        <Metric title="Total invertido" value={formatCurrency(totalInvested)} />
-        <Metric title="Lotes registrados" value={String(lots.length)} />
-        {INSTRUMENT_TYPES.map((instrument) => (
-          <Metric key={instrument} title={`Tasa ${instrument}`} value={formatPercent(quote(activeSnapshot, instrument)?.annualRate)} />
-        ))}
-      </section>
-
-      <section className="overflow-hidden rounded-md border border-[var(--line)] bg-white">
-        <div className="border-b border-[var(--line)] px-4 py-3">
-          <h2 className="text-lg font-semibold">Curva disponible por instrumento</h2>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            {curveQuotes.length > 0
-              ? `${curveQuotes.length} tasas cargadas del snapshot activo.`
-              : "Sin curva cargada todavía."}
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-[#eef2ef] text-left">
-              <tr>
-                <th className="px-4 py-3">Instrumento</th>
-                <th className="px-4 py-3">Plazo</th>
-                <th className="px-4 py-3">Tasa anual</th>
-                <th className="px-4 py-3">Fuente</th>
-              </tr>
-            </thead>
-            <tbody>
-              {curveQuotes.length > 0 ? (
-                curveQuotes.map((item) => (
-                  <tr className="border-t border-[var(--line)]" key={`${item.instrument}-${item.termLabel ?? item.termYears ?? item.source}`}>
-                    <td className="px-4 py-3 font-semibold">{item.instrument}</td>
-                    <td className="px-4 py-3">{item.termLabel ?? (item.termYears ? `${item.termYears} años` : "N/D")}</td>
-                    <td className="px-4 py-3">{formatPercent(item.annualRate)}</td>
-                    <td className="px-4 py-3 text-[var(--muted)]">{item.source}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td className="px-4 py-6 text-[var(--muted)]" colSpan={4}>
-                    Actualiza fuentes para ver la curva disponible.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="grid gap-5 lg:grid-cols-[360px_1fr]">
-        <div className="rounded-md border border-[var(--line)] bg-white p-4">
-          <div className="mb-4 flex items-center gap-2">
-            <Save size={18} className="text-[var(--accent)]" />
-            <h2 className="text-lg font-semibold">Registro mensual</h2>
-          </div>
-          <div className="grid gap-3">
-            <label className="grid gap-1 text-sm font-medium">
-              Mes
-              <input
-                className="h-10 rounded-md border border-[var(--line)] px-3"
-                type="month"
-                value={month}
-                onChange={(event) => updateMonth(event.target.value)}
-              />
-            </label>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="grid gap-1 text-sm font-medium">
-                Fecha de subasta
-                <input
-                  className="h-10 rounded-md border border-[var(--line)] px-3 disabled:bg-[#eef2ef] disabled:text-[var(--muted)]"
-                  type="date"
-                  value={auctionDate}
-                  disabled={!requiresInvestmentDates}
-                  onChange={(event) => setAuctionDate(event.target.value)}
-                />
-                <span className="text-xs font-normal text-[var(--muted)]">
-                  Se usa solo para BONOS, UDIBONOS y CETES.
-                </span>
-              </label>
-              <label className="grid gap-1 text-sm font-medium">
-                Fecha de vencimiento
-                <input
-                  className="h-10 rounded-md border border-[var(--line)] px-3 disabled:bg-[#eef2ef] disabled:text-[var(--muted)]"
-                  type="date"
-                  value={maturityDate}
-                  disabled={!requiresInvestmentDates}
-                  onChange={(event) => setMaturityDate(event.target.value)}
-                  min={auctionDate}
-                />
-                <span className="text-xs font-normal text-[var(--muted)]">
-                  BONDDIA se guarda sin vencimiento.
-                </span>
-              </label>
-            </div>
-            {INSTRUMENT_TYPES.map((instrument) => (
-              <label className="grid gap-1 text-sm font-medium" key={instrument}>
-                {INSTRUMENT_LABELS[instrument]}
-                <input
-                  className="h-10 rounded-md border border-[var(--line)] px-3"
-                  type="number"
-                  min="0"
-                  value={investmentAmounts[instrument]}
-                  onChange={(event) =>
-                    setInvestmentAmounts((current) => ({ ...current, [instrument]: event.target.value }))
-                  }
-                />
-              </label>
-            ))}
-            <button
-              className="mt-2 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[var(--foreground)] px-4 text-sm font-semibold text-white"
-              onClick={saveMonthlyInvestment}
-              disabled={busy === "investment"}
-            >
-              <Database size={16} />
-              {busy === "investment" ? "Guardando" : "Guardar inversión"}
-            </button>
-            {investmentMessage ? (
-              <div className="rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm text-[var(--muted)]">
-                {investmentMessage}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="mt-5 rounded-md bg-[#eef6f3] p-3 text-xs leading-5 text-[var(--muted)]">
-            Snapshot activo: {activeSnapshot ? new Date(activeSnapshot.fetchedAt).toLocaleString("es-MX") : "N/D"}.
-            Inflación: {formatPercent(activeSnapshot?.inflationAnnual)}. Retención Art. 24 LIF:{" "}
-            {formatPercent(activeSnapshot?.provisionalWithholdingRate)}.
-          </div>
-        </div>
-
-        <div className="rounded-md border border-[var(--line)] bg-white p-4">
-          <div className="mb-4 flex items-center gap-2">
-            <BarChart3 size={18} className="text-[var(--accent)]" />
-            <h2 className="text-lg font-semibold">Proyección a 30 años</h2>
-          </div>
-          <div className="h-[330px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <CartesianGrid stroke="#dce3dd" strokeDasharray="3 3" />
-                <XAxis dataKey="year" tickLine={false} />
-                <YAxis tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`} tickLine={false} />
-                <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} labelFormatter={(label) => `Año ${label}`} />
-                <Area type="monotone" dataKey="realBalance" name="Pesos de hoy" stroke="#0f766e" fill="#99f6e4" />
-                <Area type="monotone" dataKey="nominalBalance" name="Nominal" stroke="#3b5b48" fill="#dce9df" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-5 lg:grid-cols-[1fr_420px]">
-        <div className="overflow-hidden rounded-md border border-[var(--line)] bg-white">
-          <div className="border-b border-[var(--line)] px-4 py-3">
-            <h2 className="text-lg font-semibold">Horizontes</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-[#eef2ef] text-left">
-                <tr>
-                  <th className="px-4 py-3">Horizonte</th>
-                  <th className="px-4 py-3">Aportado</th>
-                  <th className="px-4 py-3">Valor nominal</th>
-                  <th className="px-4 py-3">Valor real</th>
-                  <th className="px-4 py-3">Retorno real</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summaries.map((summary) => (
-                  <tr className="border-t border-[var(--line)]" key={summary.horizonYears}>
-                    <td className="px-4 py-3 font-semibold">{summary.horizonYears} años</td>
-                    <td className="px-4 py-3">{formatCurrency(summary.contributed)}</td>
-                    <td className="px-4 py-3">{formatCurrency(summary.nominalBalance)}</td>
-                    <td className="px-4 py-3">{formatCurrency(summary.realBalance)}</td>
-                    <td className="px-4 py-3">{formatCurrency(summary.realReturn)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="rounded-md border border-[var(--line)] bg-white p-4">
-          <div className="mb-4 flex items-center gap-2">
-            <Brain size={18} className="text-[var(--accent)]" />
-            <h2 className="text-lg font-semibold">Análisis del mes</h2>
-          </div>
-          <button
-            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-[var(--accent-strong)] px-4 text-sm font-semibold text-white"
-            onClick={runMonthlyAnalysis}
-            disabled={busy === "analysis"}
-          >
-            <Brain size={16} />
-            {busy === "analysis" ? "Analizando" : "Analizar con OpenAI"}
-          </button>
-
-          {analysisMessage ? (
-            <div className="mt-3 rounded-md border border-[#e7c46b] bg-[#fff8e6] p-3 text-sm leading-6 text-[#6f4a00]">
-              {analysisMessage}
-            </div>
-          ) : null}
-
-          {latestAnalysis ? (
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="rounded-md bg-[#eef6f3] p-3">
-                <p className="font-semibold">{latestAnalysis.recommendation.replace(/_/g, " ")}</p>
-                <p className="text-[var(--muted)]">Confianza: {latestAnalysis.confidence}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {Object.entries(latestAnalysis.targetAllocation).map(([key, value]) => (
-                  <div className="rounded-md border border-[var(--line)] p-2" key={key}>
-                    <p className="text-xs text-[var(--muted)]">{key}</p>
-                    <p className="font-semibold">{value}%</p>
-                  </div>
-                ))}
-              </div>
-              <ul className="list-disc space-y-1 pl-5 text-[var(--muted)]">
-                {latestAnalysis.rationale.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-              {latestAnalysis.macroSummary ? <AnalysisList title="Macro" items={latestAnalysis.macroSummary} /> : null}
-              {latestAnalysis.curveSummary ? <AnalysisList title="Curva" items={latestAnalysis.curveSummary} /> : null}
-              {latestAnalysis.portfolioSummary ? (
-                <AnalysisList title="Cartera" items={latestAnalysis.portfolioSummary} />
-              ) : null}
-              {latestAnalysis.actionItems ? <AnalysisList title="Acciones" items={latestAnalysis.actionItems} /> : null}
-              {latestAnalysis.watchConditions ? (
-                <AnalysisList title="Vigilar" items={latestAnalysis.watchConditions} />
-              ) : null}
-              <p className="text-xs text-[var(--warning)]">Sugerencia informativa. No es asesoría financiera.</p>
-            </div>
-          ) : (
-            <p className="mt-4 text-sm leading-6 text-[var(--muted)]">
-              Genera una sugerencia no ejecutable usando solo BONOS, UDIBONOS, CETES y BONDDIA.
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section className="grid gap-5 lg:grid-cols-[1fr_420px]">
-        <div className="overflow-hidden rounded-md border border-[var(--line)] bg-white">
-          <div className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-3">
-            <CalendarClock size={18} className="text-[var(--accent)]" />
-            <h2 className="text-lg font-semibold">Vencimientos por lote</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-[#eef2ef] text-left">
-                <tr>
-                  <th className="px-4 py-3">Subasta</th>
-                  <th className="px-4 py-3">Instrumento</th>
-                  <th className="px-4 py-3">Monto</th>
-                  <th className="px-4 py-3">Tasa</th>
-                  <th className="px-4 py-3">ISR prov. anual base</th>
-                  <th className="px-4 py-3">Vencimiento</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lotRows.length > 0 ? (
-                  lotRows.map((lot) => (
-                    <tr className="border-t border-[var(--line)]" key={lot.id}>
-                      <td className="px-4 py-3">{formatIsoDate(lot.date)}</td>
-                      <td className="px-4 py-3 font-semibold">{lot.instrument}</td>
-                      <td className="px-4 py-3">{formatCurrency(lot.amount)}</td>
-                      <td className="px-4 py-3">{formatPercent(lot.annualRate)}</td>
-                      <td className="px-4 py-3">{formatCurrency(lot.estimatedAnnualWithholding ?? 0)}</td>
-                      <td className="px-4 py-3">{lot.maturityDate ? formatIsoDate(lot.maturityDate) : "No Aplica"}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td className="px-4 py-6 text-[var(--muted)]" colSpan={6}>
-                      Guarda una inversión mensual para ver sus lotes.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-              {lotRows.length > 0 ? (
-                <tfoot className="border-t border-[var(--line)] bg-[#eef2ef] font-semibold">
-                  <tr>
-                    <td className="px-4 py-3" colSpan={2}>
-                      Total
-                    </td>
-                    <td className="px-4 py-3">{formatCurrency(lotRowsTotal)}</td>
-                    <td className="px-4 py-3" colSpan={3} />
-                  </tr>
-                </tfoot>
-              ) : null}
-            </table>
-          </div>
-        </div>
-
-        <div className="rounded-md border border-[var(--line)] bg-white p-4">
-          <div className="mb-4 flex items-center gap-2">
-            <FileText size={18} className="text-[var(--accent)]" />
-            <h2 className="text-lg font-semibold">Declaración anual / ISR</h2>
-          </div>
-          <div className="grid gap-3">
-            <label className="grid gap-1 text-sm font-medium">
-              Año fiscal
-              <input
-                className="h-10 rounded-md border border-[var(--line)] px-3"
-                type="number"
-                value={fiscalYear}
-                onChange={(event) => setFiscalYear(event.target.value)}
-              />
-            </label>
-
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase text-[var(--accent)]">Estimado desde inversiones</p>
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <MiniMetric title="Nominal" value={formatCurrency(currentTaxEstimate.nominalInterest)} />
-                <MiniMetric title="Acumulable" value={formatCurrency(currentTaxEstimate.realInterest)} />
-                <MiniMetric title="ISR prov. año fiscal" value={formatCurrency(currentTaxEstimate.isrWithheld)} />
-              </div>
-            </div>
-
-            <div className="overflow-x-auto rounded-md border border-[var(--line)]">
-              <table className="w-full min-w-[520px] text-sm">
-                <thead className="bg-[#eef2ef] text-left">
-                  <tr>
-                    <th className="px-3 py-2">Instrumento</th>
-                    <th className="px-3 py-2">Lotes</th>
-                    <th className="px-3 py-2">Nominal</th>
-                    <th className="px-3 py-2">Acumulable</th>
-                    <th className="px-3 py-2">ISR año fiscal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentTaxEstimate.lines.length > 0 ? (
-                    currentTaxEstimate.lines.map((line) => (
-                      <tr className="border-t border-[var(--line)]" key={line.instrument}>
-                        <td className="px-3 py-2 font-semibold">{line.instrument}</td>
-                        <td className="px-3 py-2">{line.lotsCount}</td>
-                        <td className="px-3 py-2">{formatCurrency(line.nominalInterest)}</td>
-                        <td className="px-3 py-2">{formatCurrency(line.realInterest)}</td>
-                        <td className="px-3 py-2">{formatCurrency(line.isrWithheld)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td className="px-3 py-4 text-[var(--muted)]" colSpan={5}>
-                        Sin inversiones activas para este año fiscal.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase text-[var(--accent)]">Constancia oficial / ajuste</p>
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <MiniMetric title="Nominal" value={formatCurrency(currentTaxSummary.nominalInterest)} />
-                <MiniMetric title="Acumulable" value={formatCurrency(currentTaxSummary.realInterest)} />
-                <MiniMetric title="ISR" value={formatCurrency(currentTaxSummary.isrWithheld)} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <label className="grid gap-1 text-sm font-medium">
-                Instrumento oficial
-                <select
-                  className="h-10 rounded-md border border-[var(--line)] px-3"
-                  value={taxInstrument}
-                  onChange={(event) => setTaxInstrument(event.target.value as TaxDeclarationRecord["instrument"])}
-                >
-                  {INSTRUMENT_TYPES.map((instrument) => (
-                    <option value={instrument} key={instrument}>
-                      {INSTRUMENT_LABELS[instrument]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <label className="grid gap-1 text-sm font-medium">
-              Interés nominal oficial
-              <input
-                className="h-10 rounded-md border border-[var(--line)] px-3"
-                type="number"
-                min="0"
-                value={nominalInterest}
-                onChange={(event) => setNominalInterest(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-medium">
-              Interés real / acumulable oficial
-              <input
-                className="h-10 rounded-md border border-[var(--line)] px-3"
-                type="number"
-                min="0"
-                value={realInterest}
-                onChange={(event) => setRealInterest(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-medium">
-              ISR retenido
-              <input
-                className="h-10 rounded-md border border-[var(--line)] px-3"
-                type="number"
-                min="0"
-                value={isrWithheld}
-                onChange={(event) => setIsrWithheld(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-medium">
-              Notas
-              <input
-                className="h-10 rounded-md border border-[var(--line)] px-3"
-                value={taxNotes}
-                onChange={(event) => setTaxNotes(event.target.value)}
-              />
-            </label>
-            <button
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[var(--foreground)] px-4 text-sm font-semibold text-white"
-              onClick={saveTaxRecord}
-            >
-              <FileText size={16} />
-              Guardar dato fiscal
-            </button>
-          </div>
-          <p className="mt-3 text-xs leading-5 text-[var(--muted)]">
-            El estimado se deriva de los lotes registrados y se prorratea por días activos del año fiscal. La constancia
-            oficial queda guardada por separado para conciliación.
-          </p>
-        </div>
-      </section>
-    </main>
-  );
-}
-
-function Metric({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="rounded-md border border-[var(--line)] bg-white p-4">
-      <p className="text-sm text-[var(--muted)]">{title}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
-    </div>
-  );
-}
-
-function MiniMetric({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="rounded-md border border-[var(--line)] p-2">
-      <p className="text-xs text-[var(--muted)]">{title}</p>
-      <p className="mt-1 text-sm font-semibold">{value}</p>
-    </div>
-  );
-}
-
-function AnalysisList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <p className="mb-1 text-xs font-semibold uppercase text-[var(--accent)]">{title}</p>
-      <ul className="list-disc space-y-1 pl-5 text-[var(--muted)]">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
-    </div>
+    <DashboardShell
+      activeSnapshot={activeSnapshot}
+      analysisMessage={analysisMessage}
+      auctionDate={auctionDate}
+      busy={busy}
+      chartData={chartData}
+      currentTaxEstimate={currentTaxEstimate}
+      currentTaxSummary={currentTaxSummary}
+      curveQuotes={curveQuotes}
+      fiscalYear={fiscalYear}
+      investmentAmounts={investmentAmounts}
+      investmentMessage={investmentMessage}
+      latestAnalysis={latestAnalysis}
+      lotRows={lotRows}
+      lotRowsTotal={lotRowsTotal}
+      lots={lots}
+      maturityDate={maturityDate}
+      message={message}
+      missingManualConfig={missingManualConfig}
+      month={month}
+      nominalInterest={nominalInterest}
+      realInterest={realInterest}
+      refreshMarketData={refreshMarketData}
+      requiresInvestmentDates={requiresInvestmentDates}
+      runMonthlyAnalysis={runMonthlyAnalysis}
+      saveMonthlyInvestment={saveMonthlyInvestment}
+      saveTaxRecord={saveTaxRecord}
+      setAuctionDate={setAuctionDate}
+      setFiscalYear={setFiscalYear}
+      setInvestmentAmounts={setInvestmentAmounts}
+      setMaturityDate={setMaturityDate}
+      setNominalInterest={setNominalInterest}
+      setRealInterest={setRealInterest}
+      setTaxInstrument={setTaxInstrument}
+      setTaxNotes={setTaxNotes}
+      setIsrWithheld={setIsrWithheld}
+      signOut={signOut}
+      summaries={summaries}
+      taxInstrument={taxInstrument}
+      taxNotes={taxNotes}
+      isrWithheld={isrWithheld}
+      totalInvested={totalInvested}
+      updateMonth={updateMonth}
+      upcomingMaturities={upcomingMaturities}
+    />
   );
 }
