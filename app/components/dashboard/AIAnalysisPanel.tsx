@@ -1,4 +1,4 @@
-import type { InstrumentType, MonthlyAnalysis } from "@/core/types";
+import { INSTRUMENT_TYPES, type InstrumentType, type MonthlyAnalysis } from "@/core/types";
 import AllocationDiff from "./AllocationDiff";
 import BulletColumn from "./BulletColumn";
 import ConfidenceLadder from "./ConfidenceLadder";
@@ -30,6 +30,7 @@ export default function AIAnalysisPanel({
   const formattedMonth = formatMonth(month);
   const runAt = latestAnalysis?.createdAt ? formatRunDate(latestAnalysis.createdAt) : "sin ejecución";
   const isErrorMessage = Boolean(analysisMessage && !analysisMessage.toLowerCase().includes("generado"));
+  const targetAllocationSummary = latestAnalysis ? buildTargetAllocationSummary(latestAnalysis.targetAllocation) : null;
 
   return (
     <section className="relative flex min-h-[440px] flex-col gap-[18px] overflow-hidden rounded-[18px] border border-[var(--hairline)] bg-[var(--panel-bg)] px-5 py-[22px] backdrop-blur-2xl md:px-[26px]">
@@ -100,6 +101,11 @@ export default function AIAnalysisPanel({
               <p className="text-[18px] font-semibold leading-[1.3] tracking-[-0.015em]">
                 {recommendationLabels[latestAnalysis.recommendation]} con monitoreo de curva, inflación y liquidez.
               </p>
+              {targetAllocationSummary ? (
+                <p className="rounded-[10px] border border-[var(--hairline)] bg-white/[0.04] px-3 py-2 text-[12px] font-semibold leading-5 text-[var(--foreground)]">
+                  {targetAllocationSummary}
+                </p>
+              ) : null}
               <div className="grid gap-1.5">
                 {latestAnalysis.rationale.slice(0, 5).map((item, index) => (
                   <div className="flex gap-2 text-[11.5px] leading-5 text-[var(--text-soft)]" key={item}>
@@ -195,4 +201,20 @@ function formatMonth(month: string) {
 
 function formatRunDate(date: string) {
   return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(new Date(date));
+}
+
+const percentFormatter = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 });
+
+function buildTargetAllocationSummary(target: Record<InstrumentType, number>) {
+  const parts = INSTRUMENT_TYPES.map((instrument) => `${formatAllocationPercent(target[instrument] ?? 0)} en ${instrument}`);
+  return `Este mes entonces invierte ${joinWithFinalAnd(parts)}.`;
+}
+
+function formatAllocationPercent(value: number) {
+  return `${percentFormatter.format(Number.isFinite(value) ? value : 0)}%`;
+}
+
+function joinWithFinalAnd(parts: string[]) {
+  if (parts.length <= 1) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}`;
 }
