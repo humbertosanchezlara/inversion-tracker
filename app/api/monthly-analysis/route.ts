@@ -10,15 +10,28 @@ type Body = {
     lots: InvestmentLot[];
     taxRecords: TaxDeclarationRecord[];
     totalInvested: number;
-    currentAllocation: Record<string, number>;
+    currentAmountsByInstrument: Record<InstrumentType, number>;
+    currentAllocation: Record<InstrumentType, number>;
+    byInstrumentTerm: Array<{
+      instrument: InstrumentType;
+      termYears: number;
+      amount: number;
+      allocationPercent: number;
+      lotsCount: number;
+      weightedAnnualRate: number;
+      nextMaturityDate?: string;
+    }>;
     upcomingMaturities: Array<{
-      instrument: string;
+      instrument: InstrumentType;
       amount: number;
       maturityDate: string;
       annualRate: number;
+      termYears: number;
+      couponFrequencyMonths?: 6;
     }>;
   };
   currentAllocation?: Record<InstrumentType, number>;
+  targetPolicyAllocation?: Record<InstrumentType, number>;
 };
 
 const schema = {
@@ -111,9 +124,10 @@ export async function POST(request: Request) {
           role: "user",
           content: JSON.stringify({
             task:
-              "Haz un análisis mensual integral: curva de tasas por plazos, inflación, condiciones macro de México/mundo inferibles de tasas/FX/inflación disponibles, y cartera acumulada. La base es 60% UDIBONOS / 40% BONOS, pero puedes recomendar un split distinto dentro de BONOS, UDIBONOS, CETES y BONDDIA. Devuelve solo el JSON del schema.",
+              "Haz un análisis mensual integral: curva de tasas por plazos, inflación, condiciones macro de México/mundo inferibles de tasas/FX/inflación disponibles, y cartera acumulada. Usa currentAllocation como la asignación real actual. Usa targetPolicyAllocation solo como referencia base 60% UDIBONOS / 40% BONOS. En portfolio, considera lots, byInstrumentTerm y upcomingMaturities; distingue explícitamente BONOS/UDIBONOS por termYears, annualRate y maturityDate para no mezclar compras de 10 años con 30 años. Puedes recomendar un split distinto dentro de BONOS, UDIBONOS, CETES y BONDDIA. Devuelve solo el JSON del schema.",
             month: body.month,
-            currentAllocation: body.currentAllocation ?? { BONOS: 40, UDIBONOS: 60, CETES: 0, BONDDIA: 0 },
+            currentAllocation: body.currentAllocation ?? { BONOS: 0, UDIBONOS: 0, CETES: 0, BONDDIA: 0 },
+            targetPolicyAllocation: body.targetPolicyAllocation ?? { BONOS: 40, UDIBONOS: 60, CETES: 0, BONDDIA: 0 },
             marketSnapshot: body.marketSnapshot,
             portfolio: body.portfolio,
           }),

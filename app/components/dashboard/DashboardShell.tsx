@@ -2,6 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { INSTRUMENT_LABELS, INSTRUMENT_TYPES } from "@/core/types";
+import { addYearsIsoDate, formatIsoDate } from "@/core/dates";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import PortfolioHero from "./PortfolioHero";
@@ -24,6 +25,8 @@ import type {
   TaxDeclarationSummary,
 } from "@/core/types";
 
+const BOND_TERM_OPTIONS = [3, 5, 7, 10, 20, 30] as const;
+
 export type DashboardShellProps = {
   activeSnapshot?: MarketSnapshot;
   analysisMessage: string | null;
@@ -35,13 +38,13 @@ export type DashboardShellProps = {
   curveQuotes: MarketInstrumentQuote[];
   fiscalYear: string;
   investmentAmounts: Record<InstrumentType, string>;
+  investmentTerms: Record<InstrumentType, string>;
   investmentMessage: string | null;
   isrWithheld: string;
   latestAnalysis?: MonthlyAnalysis;
   lotRows: InvestmentLot[];
   lotRowsTotal: number;
   lots: InvestmentLot[];
-  maturityDate: string;
   message: string | null;
   missingManualConfig: boolean;
   month: string;
@@ -55,8 +58,8 @@ export type DashboardShellProps = {
   setAuctionDate: Dispatch<SetStateAction<string>>;
   setFiscalYear: Dispatch<SetStateAction<string>>;
   setInvestmentAmounts: Dispatch<SetStateAction<Record<InstrumentType, string>>>;
+  setInvestmentTerms: Dispatch<SetStateAction<Record<InstrumentType, string>>>;
   setIsrWithheld: Dispatch<SetStateAction<string>>;
-  setMaturityDate: Dispatch<SetStateAction<string>>;
   setNominalInterest: Dispatch<SetStateAction<string>>;
   setRealInterest: Dispatch<SetStateAction<string>>;
   setTaxInstrument: Dispatch<SetStateAction<TaxDeclarationRecord["instrument"]>>;
@@ -223,7 +226,7 @@ function MonthlyInvestmentForm({ props }: { props: DashboardShellProps }) {
         />
       </label>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3">
         <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-soft)]">
           Fecha de subasta
           <input
@@ -234,34 +237,52 @@ function MonthlyInvestmentForm({ props }: { props: DashboardShellProps }) {
             value={props.auctionDate}
           />
         </label>
-        <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-soft)]">
-          Fecha de vencimiento
-          <input
-            className="h-10 rounded-xl border border-[var(--hairline)] bg-white/[0.04] px-3 font-mono text-[12px] text-[var(--foreground)] outline-none disabled:text-[var(--muted)]"
-            disabled={!props.requiresInvestmentDates}
-            min={props.auctionDate}
-            onChange={(event) => props.setMaturityDate(event.target.value)}
-            type="date"
-            value={props.maturityDate}
-          />
-        </label>
       </div>
 
       <div className="grid gap-3">
-        {INSTRUMENT_TYPES.map((instrument) => (
-          <label className="grid gap-1.5 text-[12px] font-medium text-[var(--text-soft)]" key={instrument}>
-            {INSTRUMENT_LABELS[instrument]}
-            <input
-              className="h-10 rounded-xl border border-[var(--hairline)] bg-white/[0.04] px-3 font-mono text-[12px] text-[var(--foreground)] outline-none focus:border-[rgba(103,232,200,0.45)]"
-              min="0"
-              onChange={(event) =>
-                props.setInvestmentAmounts((current) => ({ ...current, [instrument]: event.target.value }))
-              }
-              type="number"
-              value={props.investmentAmounts[instrument]}
-            />
-          </label>
-        ))}
+        {INSTRUMENT_TYPES.map((instrument) => {
+          const supportsTerm = hasBondTermSelection(instrument);
+          const amount = Number(props.investmentAmounts[instrument]) || 0;
+          const termYears = Number(props.investmentTerms[instrument]) || 10;
+          const maturityDate = props.auctionDate ? addYearsIsoDate(props.auctionDate, termYears) : undefined;
+
+          return (
+            <div className="grid gap-1.5 text-[12px] font-medium text-[var(--text-soft)]" key={instrument}>
+              <span>{INSTRUMENT_LABELS[instrument]}</span>
+              <div className={supportsTerm ? "grid gap-2 sm:grid-cols-[1fr_118px]" : "grid"}>
+                <input
+                  aria-label={`Monto ${INSTRUMENT_LABELS[instrument]}`}
+                  className="h-10 rounded-xl border border-[var(--hairline)] bg-white/[0.04] px-3 font-mono text-[12px] text-[var(--foreground)] outline-none focus:border-[rgba(103,232,200,0.45)]"
+                  min="0"
+                  onChange={(event) =>
+                    props.setInvestmentAmounts((current) => ({ ...current, [instrument]: event.target.value }))
+                  }
+                  type="number"
+                  value={props.investmentAmounts[instrument]}
+                />
+                {supportsTerm ? (
+                  <select
+                    aria-label={`Plazo ${INSTRUMENT_LABELS[instrument]}`}
+                    className="h-10 rounded-xl border border-[var(--hairline)] bg-white/[0.04] px-3 font-mono text-[12px] text-[var(--foreground)] outline-none focus:border-[rgba(103,232,200,0.45)]"
+                    onChange={(event) =>
+                      props.setInvestmentTerms((current) => ({ ...current, [instrument]: event.target.value }))
+                    }
+                    value={props.investmentTerms[instrument]}
+                  >
+                    {BOND_TERM_OPTIONS.map((term) => (
+                      <option key={term} value={term}>
+                        {term} años
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
+              {supportsTerm && amount > 0 && maturityDate ? (
+                <span className="font-mono text-[10px] text-[var(--muted)]">Vence {formatIsoDate(maturityDate)}</span>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
 
       <button
@@ -295,6 +316,10 @@ function calculateAllocation(lots: InvestmentLot[], totalInvested: number): Reco
   }
 
   return allocation;
+}
+
+function hasBondTermSelection(instrument: InstrumentType) {
+  return instrument === "BONOS" || instrument === "UDIBONOS";
 }
 
 function quote(snapshot: MarketSnapshot | undefined, instrument: InstrumentType, termYears?: number) {

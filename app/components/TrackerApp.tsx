@@ -12,7 +12,7 @@ import {
   saveTaxDeclarationRecord,
 } from "@/data/supabaseRepository";
 import { projectPortfolio, summarizeProjection } from "@/core/projection";
-import { formatIsoDate, addYearsIsoDate, firstDayOfMonth } from "@/core/dates";
+import { addYearsIsoDate, firstDayOfMonth } from "@/core/dates";
 import { estimateTaxDeclarationFromLots, summarizeTaxDeclaration } from "@/core/tax";
 import {
   CURRENT_LIF_ARTICLE_24_WITHHOLDING_RATE,
@@ -23,17 +23,26 @@ import type { InstrumentType, InvestmentLot, MarketSnapshot, MonthlyAnalysis, Ta
 import { formatCurrency, monthKey } from "@/lib/format";
 
 const HORIZONS = [10, 15, 20, 25, 30];
+const BOND_TERM_OPTIONS = [3, 5, 7, 10, 20, 30] as const;
 const DEFAULT_AMOUNTS: Record<InstrumentType, string> = {
   BONOS: "4000",
   UDIBONOS: "6000",
   CETES: "0",
   BONDDIA: "0",
 };
+const SUPABASE_CONTACT_ERROR =
+  "No pude contactar Supabase. Revisa que NEXT_PUBLIC_SUPABASE_URL apunte a un proyecto activo.";
 const EMPTY_AMOUNTS: Record<InstrumentType, string> = {
   BONOS: "0",
   UDIBONOS: "0",
   CETES: "0",
   BONDDIA: "0",
+};
+const DEFAULT_INVESTMENT_TERMS: Record<InstrumentType, string> = {
+  BONOS: "10",
+  UDIBONOS: "10",
+  CETES: "1",
+  BONDDIA: "1",
 };
 const INSTRUMENT_ORDER: InstrumentType[] = ["CETES", "BONOS", "UDIBONOS", "BONDDIA"];
 
@@ -41,7 +50,27 @@ function newId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
 
-function quote(snapshot: MarketSnapshot | undefined, instrument: InstrumentType) {
+function readableAuthError(error: { message?: string } | null | undefined) {
+  const message = error?.message;
+  if (!message) return SUPABASE_CONTACT_ERROR;
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("failed to fetch") || normalized.includes("fetch failed") || normalized.includes("load failed")) {
+    return SUPABASE_CONTACT_ERROR;
+  }
+
+  return message;
+}
+
+function hasBondTermSelection(instrument: InstrumentType) {
+  return instrument === "BONOS" || instrument === "UDIBONOS";
+}
+
+function quote(snapshot: MarketSnapshot | undefined, instrument: InstrumentType, termYears?: number) {
+  if (typeof termYears === "number") {
+    return snapshot?.quotes.find((item) => item.instrument === instrument && item.termYears === termYears);
+  }
+
   return snapshot?.quotes.find((item) => item.instrument === instrument && item.termYears === 10)
     ?? snapshot?.quotes.find((item) => item.instrument === instrument);
 }
@@ -53,6 +82,17 @@ function lotTermYears(instrument: InstrumentType, quoteTermYears?: number) {
 
 function couponFrequencyMonths(instrument: InstrumentType) {
   return instrument === "BONOS" || instrument === "UDIBONOS" ? 6 as const : undefined;
+}
+
+function investmentTermYears(
+  instrument: InstrumentType,
+  investmentTerms: Record<InstrumentType, string>,
+  quoteTermYears?: number,
+) {
+  if (!hasBondTermSelection(instrument)) return lotTermYears(instrument, quoteTermYears);
+
+  const termYears = Number(investmentTerms[instrument]);
+  return BOND_TERM_OPTIONS.includes(termYears as (typeof BOND_TERM_OPTIONS)[number]) ? termYears : 10;
 }
 
 function latestUsableSnapshot(snapshots: MarketSnapshot[]) {
@@ -85,6 +125,65 @@ function readableError(error: unknown) {
   return "Error desconocido.";
 }
 
+function calculateAllocationPercent(lots: InvestmentLot[], totalInvested: number) {
+  const allocation = { BONOS: 0, UDIBONOS: 0, CETES: 0, BONDDIA: 0 } satisfies Record<InstrumentType, number>;
+  if (totalInvested <= 0) return allocation;
+
+  for (const lot of lots) {
+    allocation[lot.instrument] += (lot.amount / totalInvested) * 100;
+  }
+
+  return allocation;
+}
+
+function summarizePortfolioByTerm(lots: InvestmentLot[], totalInvested: number) {
+  const byTerm = new Map<
+    string,
+    {
+      instrument: InstrumentType;
+      termYears: number;
+      amount: number;
+      lotsCount: number;
+      weightedAnnualRate: number;
+      nextMaturityDate?: string;
+    }
+  >();
+
+  for (const lot of lots) {
+    const key = `${lot.instrument}:${lot.termYears}`;
+    const current = byTerm.get(key) ?? {
+      instrument: lot.instrument,
+      termYears: lot.termYears,
+      amount: 0,
+      lotsCount: 0,
+      weightedAnnualRate: 0,
+      nextMaturityDate: lot.maturityDate,
+    };
+    current.amount += lot.amount;
+    current.lotsCount += 1;
+    current.weightedAnnualRate += lot.amount * lot.annualRate;
+    current.nextMaturityDate =
+      current.nextMaturityDate && lot.maturityDate
+        ? current.nextMaturityDate.localeCompare(lot.maturityDate) <= 0
+          ? current.nextMaturityDate
+          : lot.maturityDate
+        : current.nextMaturityDate ?? lot.maturityDate;
+    byTerm.set(key, current);
+  }
+
+  return Array.from(byTerm.values())
+    .map((item) => ({
+      ...item,
+      allocationPercent: totalInvested > 0 ? (item.amount / totalInvested) * 100 : 0,
+      weightedAnnualRate: item.amount > 0 ? item.weightedAnnualRate / item.amount : 0,
+    }))
+    .sort((a, b) => {
+      const instrumentDiff = INSTRUMENT_ORDER.indexOf(a.instrument) - INSTRUMENT_ORDER.indexOf(b.instrument);
+      if (instrumentDiff !== 0) return instrumentDiff;
+      return a.termYears - b.termYears;
+    });
+}
+
 export default function TrackerApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState("");
@@ -94,8 +193,8 @@ export default function TrackerApp() {
   const [taxRecords, setTaxRecords] = useState<TaxDeclarationRecord[]>([]);
   const [month, setMonth] = useState(monthKey());
   const [auctionDate, setAuctionDate] = useState(firstDayOfMonth(monthKey()));
-  const [maturityDate, setMaturityDate] = useState(addYearsIsoDate(firstDayOfMonth(monthKey()), 10));
   const [investmentAmounts, setInvestmentAmounts] = useState<Record<InstrumentType, string>>(DEFAULT_AMOUNTS);
+  const [investmentTerms, setInvestmentTerms] = useState<Record<InstrumentType, string>>(DEFAULT_INVESTMENT_TERMS);
   const [fiscalYear, setFiscalYear] = useState(String(new Date().getFullYear()));
   const [taxInstrument, setTaxInstrument] = useState<TaxDeclarationRecord["instrument"]>("BONOS");
   const [nominalInterest, setNominalInterest] = useState("");
@@ -118,13 +217,24 @@ export default function TrackerApp() {
   useEffect(() => {
     let cancelled = false;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (cancelled) return;
-      setSession(data.session);
-      if (data.session?.user.id) {
-        void loadData(data.session.user.id);
-      }
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setMessage(readableAuthError(error));
+          return;
+        }
+        setSession(data.session);
+        if (data.session?.user.id) {
+          void loadData(data.session.user.id);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSession(null);
+        setMessage(SUPABASE_CONTACT_ERROR);
+      });
 
     const {
       data: { subscription },
@@ -194,16 +304,23 @@ export default function TrackerApp() {
       });
   }, [activeSnapshot]);
   const allocationByInstrument = useMemo(() => {
-    return lots.reduce<Record<string, number>>((acc, lot) => {
+    return lots.reduce<Record<InstrumentType, number>>((acc, lot) => {
       acc[lot.instrument] = (acc[lot.instrument] ?? 0) + lot.amount;
       return acc;
-    }, {});
+    }, { BONOS: 0, UDIBONOS: 0, CETES: 0, BONDDIA: 0 });
   }, [lots]);
+  const currentAllocationPercent = useMemo(
+    () => calculateAllocationPercent(lots, totalInvested),
+    [lots, totalInvested],
+  );
+  const portfolioByInstrumentTerm = useMemo(
+    () => summarizePortfolioByTerm(lots, totalInvested),
+    [lots, totalInvested],
+  );
 
   function updateMonth(nextMonth: string) {
     setMonth(nextMonth);
     setAuctionDate(firstDayOfMonth(nextMonth));
-    setMaturityDate(addYearsIsoDate(firstDayOfMonth(nextMonth), 10));
   }
 
   async function refreshMarketData() {
@@ -241,12 +358,19 @@ export default function TrackerApp() {
       .map((instrument) => ({
         instrument,
         amount: Number(investmentAmounts[instrument]) || 0,
-        quote: quote(activeSnapshot, instrument),
+        termYears: investmentTermYears(instrument, investmentTerms),
+        quote: quote(
+          activeSnapshot,
+          instrument,
+          hasBondTermSelection(instrument) ? investmentTermYears(instrument, investmentTerms) : undefined,
+        ),
       }))
       .filter((item) => item.amount > 0);
     const inflationRate = activeSnapshot.inflationAnnual;
     const provisionalWithholdingRate = activeSnapshot.provisionalWithholdingRate;
-    const missingQuotes = requestedInstruments.filter((item) => !item.quote).map((item) => item.instrument);
+    const missingQuotes = requestedInstruments
+      .filter((item) => !item.quote)
+      .map((item) => (hasBondTermSelection(item.instrument) ? `${item.instrument} ${item.termYears} años` : item.instrument));
     const requiresDates = requestedInstruments.some((item) => item.instrument !== "BONDDIA");
     if (requestedInstruments.length === 0) {
       const text = "Captura al menos un monto mayor a cero.";
@@ -269,28 +393,31 @@ export default function TrackerApp() {
       return;
     }
 
-    if (requiresDates && (!auctionDate || !maturityDate)) {
-      const text = "Captura la fecha de subasta y la fecha de vencimiento.";
+    if (requiresDates && !auctionDate) {
+      const text = "Captura la fecha de subasta.";
       setMessage(text);
       setInvestmentMessage(text);
       return;
     }
 
-    if (requiresDates && maturityDate <= auctionDate) {
-      const text = "La fecha de vencimiento debe ser posterior a la fecha de subasta.";
+    const invalidMaturity = requestedInstruments.some(
+      (item) =>
+        item.instrument !== "BONDDIA" && addYearsIsoDate(auctionDate, item.termYears) <= auctionDate,
+    );
+    if (requiresDates && invalidMaturity) {
+      const text = "El plazo debe generar un vencimiento posterior a la fecha de subasta.";
       setMessage(text);
       setInvestmentMessage(text);
       return;
     }
 
     const now = new Date().toISOString();
-    const nextLots: InvestmentLot[] = requestedInstruments.map(({ instrument, amount, quote: instrumentQuote }) => {
-      const termYears = lotTermYears(instrument, instrumentQuote?.termYears);
+    const nextLots: InvestmentLot[] = requestedInstruments.map(({ instrument, amount, quote: instrumentQuote, termYears }) => {
       return {
         id: newId(),
         month,
         date: instrument === "BONDDIA" ? undefined : auctionDate,
-        maturityDate: instrument === "BONDDIA" ? undefined : maturityDate,
+        maturityDate: instrument === "BONDDIA" ? undefined : addYearsIsoDate(auctionDate, termYears),
         instrument,
         amount,
         annualRate: instrumentQuote?.annualRate ?? 0,
@@ -388,17 +515,22 @@ export default function TrackerApp() {
         body: JSON.stringify({
           month,
           marketSnapshot: activeSnapshot,
-          currentAllocation: { BONOS: 40, UDIBONOS: 60, CETES: 0, BONDDIA: 0 },
+          currentAllocation: currentAllocationPercent,
+          targetPolicyAllocation: { BONOS: 40, UDIBONOS: 60, CETES: 0, BONDDIA: 0 },
           portfolio: {
             lots,
             taxRecords,
             totalInvested,
-            currentAllocation: allocationByInstrument,
+            currentAmountsByInstrument: allocationByInstrument,
+            currentAllocation: currentAllocationPercent,
+            byInstrumentTerm: portfolioByInstrumentTerm,
             upcomingMaturities: upcomingMaturities.map((lot) => ({
               instrument: lot.instrument,
               amount: lot.amount,
               maturityDate: lot.maturityDate,
               annualRate: lot.annualRate,
+              termYears: lot.termYears,
+              couponFrequencyMonths: lot.couponFrequencyMonths,
             })),
           },
         }),
@@ -428,14 +560,19 @@ export default function TrackerApp() {
   async function signIn() {
     setBusy("auth");
     setMessage(null);
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
-    });
-    setBusy(null);
-    setMessage(error ? error.message : "Te envié un magic link. Ábrelo para entrar.");
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: window.location.origin,
+        },
+      });
+      setMessage(error ? readableAuthError(error) : "Te envié un magic link. Ábrelo para entrar.");
+    } catch {
+      setMessage(SUPABASE_CONTACT_ERROR);
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function signOut() {
@@ -445,8 +582,8 @@ export default function TrackerApp() {
   if (!session) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-4 px-4">
-        <div className="rounded-md border border-[var(--line)] bg-white p-5">
-          <p className="text-sm font-semibold text-[var(--accent)]">Supabase conectado</p>
+        <div className="rounded-md border border-[var(--line)] bg-[var(--panel)] p-5 shadow-2xl shadow-black/20 backdrop-blur">
+          <p className="text-sm font-semibold text-[var(--accent)]">Supabase configurado</p>
           <h1 className="mt-1 text-2xl font-semibold">Entrar al tracker</h1>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
             Usa tu email para recibir un magic link. Tus inversiones, configuración fiscal y análisis se guardarán en
@@ -455,7 +592,7 @@ export default function TrackerApp() {
           <label className="mt-5 grid gap-1 text-sm font-medium">
             Email
             <input
-              className="h-10 rounded-md border border-[var(--line)] px-3"
+              className="h-10 rounded-md border border-[var(--line)] bg-[var(--background-2)] px-3 placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -487,12 +624,12 @@ export default function TrackerApp() {
       curveQuotes={curveQuotes}
       fiscalYear={fiscalYear}
       investmentAmounts={investmentAmounts}
+      investmentTerms={investmentTerms}
       investmentMessage={investmentMessage}
       latestAnalysis={latestAnalysis}
       lotRows={lotRows}
       lotRowsTotal={lotRowsTotal}
       lots={lots}
-      maturityDate={maturityDate}
       message={message}
       missingManualConfig={missingManualConfig}
       month={month}
@@ -506,7 +643,7 @@ export default function TrackerApp() {
       setAuctionDate={setAuctionDate}
       setFiscalYear={setFiscalYear}
       setInvestmentAmounts={setInvestmentAmounts}
-      setMaturityDate={setMaturityDate}
+      setInvestmentTerms={setInvestmentTerms}
       setNominalInterest={setNominalInterest}
       setRealInterest={setRealInterest}
       setTaxInstrument={setTaxInstrument}
