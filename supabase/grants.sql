@@ -7,10 +7,12 @@ grant select, insert, update, delete on public.investment_lots to authenticated;
 grant select, insert, update, delete on public.market_snapshots to authenticated;
 grant select, insert, update, delete on public.monthly_analyses to authenticated;
 grant select, insert, update, delete on public.tax_declaration_records to authenticated;
+grant select, insert, update, delete on public.asset_movements to authenticated;
 
 grant select, insert, update, delete on public.investment_lots to service_role;
 grant select, insert, update, delete on public.market_snapshots to service_role;
 grant select, insert, update, delete on public.monthly_analyses to service_role;
 grant select, insert, update, delete on public.tax_declaration_records to service_role;
+grant select, insert, update, delete on public.asset_movements to service_role;
 
 grant usage, select on all sequences in schema public to authenticated, service_role;

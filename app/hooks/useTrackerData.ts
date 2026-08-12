@@ -6,7 +6,13 @@ import { supabase } from "@/lib/supabaseClient";
 import { SUPABASE_CONTACT_ERROR, readableAuthError } from "@/lib/supabaseErrors";
 import { loadCloudData } from "@/data/supabaseRepository";
 import { normalizeLot } from "@/core/lots";
-import type { InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
+import type {
+  AssetMovement,
+  InvestmentLot,
+  MarketSnapshot,
+  MonthlyAnalysis,
+  TaxDeclarationRecord,
+} from "@/core/types";
 
 export type TrackerDataStatus = "loading" | "signed-out" | "ready";
 
@@ -21,6 +27,8 @@ export function useTrackerData() {
   const [snapshots, setSnapshots] = useState<MarketSnapshot[]>([]);
   const [analyses, setAnalyses] = useState<MonthlyAnalysis[]>([]);
   const [taxRecords, setTaxRecords] = useState<TaxDeclarationRecord[]>([]);
+  const [movements, setMovements] = useState<AssetMovement[]>([]);
+  const [movementsAvailable, setMovementsAvailable] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
 
   const loadData = useCallback(async (userId: string) => {
@@ -29,6 +37,8 @@ export function useTrackerData() {
     setSnapshots(data.snapshots);
     setAnalyses(data.analyses);
     setTaxRecords(data.taxRecords);
+    setMovements(data.movements);
+    setMovementsAvailable(data.movementsAvailable);
   }, []);
 
   useEffect(() => {
@@ -68,6 +78,7 @@ export function useTrackerData() {
         setSnapshots([]);
         setAnalyses([]);
         setTaxRecords([]);
+        setMovements([]);
       }
     });
 
@@ -86,6 +97,8 @@ export function useTrackerData() {
     analyses,
     lots,
     message,
+    movements,
+    movementsAvailable,
     reload,
     session,
     setMessage,

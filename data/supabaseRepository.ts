@@ -1,6 +1,12 @@
 "use client";
 
-import type { InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
+import type {
+  AssetMovement,
+  InvestmentLot,
+  MarketSnapshot,
+  MonthlyAnalysis,
+  TaxDeclarationRecord,
+} from "@/core/types";
 import { supabase } from "@/lib/supabaseClient";
 
 function isUuid(value?: string) {
@@ -146,24 +152,92 @@ function toTaxRecord(userId: string, record: TaxDeclarationRecord) {
   };
 }
 
+function optionalNumber(value: unknown) {
+  return value === null || value === undefined ? undefined : Number(value);
+}
+
+function optionalText(value: unknown) {
+  return value === null || value === undefined ? undefined : String(value);
+}
+
+function fromAssetMovement(row: Record<string, unknown>): AssetMovement {
+  return {
+    id: String(row.id),
+    month: String(row.month),
+    occurredAt: optionalText(row.occurred_at),
+    kind: row.kind as AssetMovement["kind"],
+    asset: optionalText(row.asset),
+    quantity: optionalNumber(row.quantity),
+    unitPriceMxn: optionalNumber(row.unit_price_mxn),
+    amountMxn: optionalNumber(row.amount_mxn),
+    feeAmount: optionalNumber(row.fee_amount),
+    feeAsset: optionalText(row.fee_asset),
+    venue: optionalText(row.venue),
+    notes: optionalText(row.notes),
+    createdAt: String(row.created_at),
+  };
+}
+
+function toAssetMovement(userId: string, movement: AssetMovement) {
+  const isNone = movement.kind === "NONE";
+
+  return {
+    id: movement.id,
+    user_id: userId,
+    month: movement.month,
+    occurred_at: isNone ? null : movement.occurredAt ?? null,
+    kind: movement.kind,
+    asset: isNone ? null : movement.asset ?? null,
+    quantity: isNone ? null : movement.quantity ?? null,
+    unit_price_mxn: isNone ? null : movement.unitPriceMxn ?? null,
+    amount_mxn: isNone ? null : movement.amountMxn ?? null,
+    fee_amount: isNone ? null : movement.feeAmount ?? null,
+    fee_asset: isNone ? null : movement.feeAsset ?? null,
+    venue: isNone ? null : movement.venue ?? null,
+    notes: movement.notes ?? null,
+    created_at: movement.createdAt,
+  };
+}
+
 export async function loadCloudData(userId: string) {
-  const [lots, snapshots, analyses, taxRecords] = await Promise.all([
+  const [lots, snapshots, analyses, taxRecords, movements] = await Promise.all([
     supabase.from("investment_lots").select("*").eq("user_id", userId).order("investment_date", { ascending: false }),
     supabase.from("market_snapshots").select("*").eq("user_id", userId).order("fetched_at", { ascending: false }),
     supabase.from("monthly_analyses").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
     supabase.from("tax_declaration_records").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
+    supabase.from("asset_movements").select("*").eq("user_id", userId).order("month", { ascending: false }),
   ]);
 
   for (const result of [lots, snapshots, analyses, taxRecords]) {
     if (result.error) throw result.error;
   }
 
+  // asset_movements llegó después: si la migración todavía no corre, el resto de la
+  // app debe seguir cargando en vez de romperse por una tabla ausente.
+  if (movements.error && !isMissingTableError(movements.error)) throw movements.error;
+
   return {
     lots: (lots.data ?? []).map(fromLot),
     snapshots: (snapshots.data ?? []).map(fromSnapshot),
     analyses: (analyses.data ?? []).map(fromAnalysis),
     taxRecords: (taxRecords.data ?? []).map(fromTaxRecord),
+    movements: (movements.data ?? []).map(fromAssetMovement),
+    movementsAvailable: !movements.error,
   };
+}
+
+function isMissingTableError(error: { code?: string; message?: string }) {
+  return error.code === "42P01" || Boolean(error.message?.includes("asset_movements"));
+}
+
+export async function saveAssetMovement(userId: string, movement: AssetMovement) {
+  const { error } = await supabase.from("asset_movements").upsert(toAssetMovement(userId, movement));
+  if (error) throw error;
+}
+
+export async function deleteAssetMovement(userId: string, id: string) {
+  const { error } = await supabase.from("asset_movements").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
 }
 
 export async function saveInvestmentLots(userId: string, lots: InvestmentLot[]) {

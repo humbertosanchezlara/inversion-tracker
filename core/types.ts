@@ -26,6 +26,45 @@ export type InvestmentLot = {
   createdAt: string;
 };
 
+export type AssetMovementKind = "DEPOSIT" | "BUY" | "SELL" | "WITHDRAWAL" | "NONE";
+
+export const ASSET_MOVEMENT_KINDS = [
+  "DEPOSIT",
+  "BUY",
+  "SELL",
+  "WITHDRAWAL",
+  "NONE",
+] as const satisfies AssetMovementKind[];
+
+export const ASSET_MOVEMENT_LABELS: Record<AssetMovementKind, string> = {
+  DEPOSIT: "Depósito",
+  BUY: "Compra",
+  SELL: "Venta",
+  WITHDRAWAL: "Retiro",
+  NONE: "Sin movimientos",
+};
+
+/**
+ * Movimiento fuera del universo gubernamental (cripto, efectivo en exchange).
+ * Deliberadamente separado de InvestmentLot: no tiene plazo, vencimiento, cupón ni
+ * retención Art. 24 LIF, y no entra a proyección, estimación fiscal ni análisis IA.
+ */
+export type AssetMovement = {
+  id: string;
+  month: string;
+  occurredAt?: string;
+  kind: AssetMovementKind;
+  asset?: string;
+  quantity?: number;
+  unitPriceMxn?: number;
+  amountMxn?: number;
+  feeAmount?: number;
+  feeAsset?: string;
+  venue?: string;
+  notes?: string;
+  createdAt: string;
+};
+
 export type TaxDeclarationRecord = {
   id: string;
   fiscalYear: number;
