@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
+import { useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import DashboardShell from "@/app/components/dashboard/DashboardShell";
+import { useTrackerData } from "@/app/hooks/useTrackerData";
 import {
-  loadCloudData,
   saveInvestmentLots,
   saveMarketSnapshot,
   saveMonthlyAnalysis,
@@ -13,11 +12,10 @@ import {
 } from "@/data/supabaseRepository";
 import { projectPortfolio, summarizeProjection } from "@/core/projection";
 import { addYearsIsoDate, firstDayOfMonth } from "@/core/dates";
+import { lotTermYears } from "@/core/lots";
+import { SUPABASE_CONTACT_ERROR, readableAuthError, readableError } from "@/lib/supabaseErrors";
 import { estimateTaxDeclarationFromLots, summarizeTaxDeclaration } from "@/core/tax";
-import {
-  CURRENT_LIF_ARTICLE_24_WITHHOLDING_RATE,
-  estimateAnnualWithholding,
-} from "@/core/market";
+import { estimateAnnualWithholding } from "@/core/market";
 import { INSTRUMENT_LABELS, INSTRUMENT_TYPES } from "@/core/types";
 import type { InstrumentType, InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
 import { formatCurrency, monthKey } from "@/lib/format";
@@ -30,8 +28,6 @@ const DEFAULT_AMOUNTS: Record<InstrumentType, string> = {
   CETES: "0",
   BONDDIA: "0",
 };
-const SUPABASE_CONTACT_ERROR =
-  "No pude contactar Supabase. Revisa que NEXT_PUBLIC_SUPABASE_URL apunte a un proyecto activo.";
 const EMPTY_AMOUNTS: Record<InstrumentType, string> = {
   BONOS: "0",
   UDIBONOS: "0",
@@ -50,18 +46,6 @@ function newId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
 
-function readableAuthError(error: { message?: string } | null | undefined) {
-  const message = error?.message;
-  if (!message) return SUPABASE_CONTACT_ERROR;
-  const normalized = message.toLowerCase();
-
-  if (normalized.includes("failed to fetch") || normalized.includes("fetch failed") || normalized.includes("load failed")) {
-    return SUPABASE_CONTACT_ERROR;
-  }
-
-  return message;
-}
-
 function hasBondTermSelection(instrument: InstrumentType) {
   return instrument === "BONOS" || instrument === "UDIBONOS";
 }
@@ -73,11 +57,6 @@ function quote(snapshot: MarketSnapshot | undefined, instrument: InstrumentType,
 
   return snapshot?.quotes.find((item) => item.instrument === instrument && item.termYears === 10)
     ?? snapshot?.quotes.find((item) => item.instrument === instrument);
-}
-
-function lotTermYears(instrument: InstrumentType, quoteTermYears?: number) {
-  if (instrument === "BONOS" || instrument === "UDIBONOS") return quoteTermYears ?? 10;
-  return quoteTermYears ?? 1;
 }
 
 function couponFrequencyMonths(instrument: InstrumentType) {
@@ -100,37 +79,12 @@ function latestUsableSnapshot(snapshots: MarketSnapshot[]) {
   return usable.find((snapshot) => snapshot.quotes.length >= 5) ?? usable[0];
 }
 
-function normalizeLot(lot: InvestmentLot): InvestmentLot {
-  const provisionalWithholdingRate = lot.provisionalWithholdingRate ?? CURRENT_LIF_ARTICLE_24_WITHHOLDING_RATE;
-  const fallbackDate = firstDayOfMonth(lot.month);
-  const date = lot.date ?? (lot.instrument === "BONDDIA" ? undefined : fallbackDate);
-
-  return {
-    ...lot,
-    date,
-    maturityDate:
-      lot.maturityDate ||
-      (lot.instrument === "BONDDIA" ? undefined : addYearsIsoDate(date ?? fallbackDate, lotTermYears(lot.instrument, lot.termYears))),
-    provisionalWithholdingRate,
-    estimatedAnnualWithholding:
-      lot.estimatedAnnualWithholding ?? estimateAnnualWithholding(lot.amount, provisionalWithholdingRate),
-  };
-}
-
 function displayName(email?: string) {
   const localPart = email?.split("@")[0]?.replace(/[._-]+/g, " ").trim();
   if (!localPart) return undefined;
 
   const firstName = localPart.split(" ")[0];
   return firstName.charAt(0).toUpperCase() + firstName.slice(1);
-}
-
-function readableError(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "object" && error && "message" in error) {
-    return String((error as { message?: unknown }).message);
-  }
-  return "Error desconocido.";
 }
 
 function calculateAllocationPercent(lots: InvestmentLot[], totalInvested: number) {
@@ -193,12 +147,9 @@ function summarizePortfolioByTerm(lots: InvestmentLot[], totalInvested: number) 
 }
 
 export default function TrackerApp() {
-  const [session, setSession] = useState<Session | null>(null);
+  const { analyses, lots, message, reload, session, setMessage, snapshots, status, taxRecords, userId } =
+    useTrackerData();
   const [email, setEmail] = useState("");
-  const [lots, setLots] = useState<InvestmentLot[]>([]);
-  const [snapshots, setSnapshots] = useState<MarketSnapshot[]>([]);
-  const [analyses, setAnalyses] = useState<MonthlyAnalysis[]>([]);
-  const [taxRecords, setTaxRecords] = useState<TaxDeclarationRecord[]>([]);
   const [month, setMonth] = useState(monthKey());
   const [auctionDate, setAuctionDate] = useState(firstDayOfMonth(monthKey()));
   const [investmentAmounts, setInvestmentAmounts] = useState<Record<InstrumentType, string>>(DEFAULT_AMOUNTS);
@@ -210,59 +161,8 @@ export default function TrackerApp() {
   const [isrWithheld, setIsrWithheld] = useState("");
   const [taxNotes, setTaxNotes] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [investmentMessage, setInvestmentMessage] = useState<string | null>(null);
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
-
-  const loadData = useCallback(async (userId: string) => {
-    const data = await loadCloudData(userId);
-    setLots(data.lots.map(normalizeLot));
-    setSnapshots(data.snapshots);
-    setAnalyses(data.analyses);
-    setTaxRecords(data.taxRecords);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    supabase.auth
-      .getSession()
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          setMessage(readableAuthError(error));
-          return;
-        }
-        setSession(data.session);
-        if (data.session?.user.id) {
-          void loadData(data.session.user.id);
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setSession(null);
-        setMessage(SUPABASE_CONTACT_ERROR);
-      });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      if (nextSession?.user.id) {
-        void loadData(nextSession.user.id);
-      } else {
-        setLots([]);
-        setSnapshots([]);
-        setAnalyses([]);
-        setTaxRecords([]);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-    };
-  }, [loadData]);
 
   const activeSnapshot = useMemo(
     () => latestUsableSnapshot(snapshots),
@@ -298,7 +198,6 @@ export default function TrackerApp() {
   );
   const latestAnalysis = analyses[0];
   const missingManualConfig = !activeSnapshot;
-  const userId = session?.user.id;
   const requiresInvestmentDates = INSTRUMENT_TYPES.some(
     (instrument) => instrument !== "BONDDIA" && (Number(investmentAmounts[instrument]) || 0) > 0,
   );
@@ -344,7 +243,7 @@ export default function TrackerApp() {
           ? "No se pudieron leer fuentes automáticas. Se conserva el último snapshot usable."
           : "Fuentes actualizadas y guardadas.",
       );
-      await loadData(userId);
+      await reload();
     } catch (error) {
       setMessage(`No se pudieron guardar las fuentes en Supabase: ${readableError(error)}`);
     } finally {
@@ -446,7 +345,7 @@ export default function TrackerApp() {
       setMessage(text);
       setInvestmentMessage(text);
       setInvestmentAmounts(EMPTY_AMOUNTS);
-      await loadData(userId);
+      await reload();
     } catch (error) {
       const text = `No se pudo guardar la inversión en Supabase: ${readableError(error)}`;
       setMessage(text);
@@ -486,7 +385,7 @@ export default function TrackerApp() {
       setIsrWithheld("");
       setTaxNotes("");
       setMessage("Registro fiscal guardado para declaración anual.");
-      await loadData(userId);
+      await reload();
     } catch (error) {
       setMessage(`No se pudo guardar el registro fiscal en Supabase: ${readableError(error)}`);
     }
@@ -555,7 +454,7 @@ export default function TrackerApp() {
       await saveMonthlyAnalysis(userId, payload as MonthlyAnalysis);
       setMessage("Análisis mensual generado y guardado.");
       setAnalysisMessage("Análisis mensual generado y guardado.");
-      await loadData(userId);
+      await reload();
     } catch (error) {
       const text = error instanceof Error ? error.message : "No se pudo contactar el endpoint de análisis.";
       setMessage(text);
@@ -585,6 +484,14 @@ export default function TrackerApp() {
 
   async function signOut() {
     await supabase.auth.signOut();
+  }
+
+  if (status === "loading") {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <div className="dashboard-skeleton h-24 w-full max-w-md rounded-2xl border border-[var(--hairline)]" />
+      </main>
+    );
   }
 
   if (!session) {
