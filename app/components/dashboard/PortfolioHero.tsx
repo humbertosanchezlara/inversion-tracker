@@ -6,12 +6,19 @@ type PortfolioHeroProps = {
   lotsCount: number;
   onOpenRegister: () => void;
   totalInvested: number;
+  valueSeries: number[];
 };
 
-export default function PortfolioHero({ currentValue, inflation, lotsCount, onOpenRegister, totalInvested }: PortfolioHeroProps) {
+export default function PortfolioHero({
+  currentValue,
+  inflation,
+  lotsCount,
+  onOpenRegister,
+  totalInvested,
+  valueSeries,
+}: PortfolioHeroProps) {
   const gain = currentValue - totalInvested;
   const gainPct = totalInvested > 0 ? gain / totalInvested : 0;
-  const sparkValues = buildSparkValues(totalInvested, currentValue);
 
   return (
     <section className="group relative min-h-[196px] overflow-hidden rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] px-6 py-[22px] backdrop-blur-2xl transition duration-200 hover:-translate-y-px hover:shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
@@ -46,9 +53,14 @@ export default function PortfolioHero({ currentValue, inflation, lotsCount, onOp
           </span>{" "}
           · {formatPercent(gainPct)} sobre aportado
         </p>
-        <div className="mt-3">
-          <Sparkline height={42} stroke="var(--bonos)" values={sparkValues} width={280} />
-        </div>
+        {valueSeries.length >= 2 ? (
+          <div className="mt-3">
+            <Sparkline height={42} stroke="var(--bonos)" values={valueSeries} width={280} />
+            <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.10em] text-[var(--muted)]">
+              Valor acumulado por mes registrado
+            </p>
+          </div>
+        ) : null}
         <div className="mt-2 flex flex-wrap gap-5 text-[11px] text-[var(--text-soft)]">
           <MiniStat label="Aportado" value={formatCurrency(totalInvested)} />
           <MiniStat label="Lotes" value={String(lotsCount)} />
@@ -68,18 +80,6 @@ function MiniStat({ label, value }: { label: string; value: string }) {
       <p className="mt-0.5 font-mono text-[13px] text-[var(--foreground)]">{value}</p>
     </div>
   );
-}
-
-function buildSparkValues(start: number, end: number) {
-  if (start <= 0 && end <= 0) return [0, 1, 0.6, 1.2, 0.9, 1.5, 1.3, 1.9, 1.8, 2.2, 2.4];
-  const base = start || end;
-  const target = end || start;
-  const wiggle = [0, 0.006, -0.002, 0.011, 0.018, 0.014, 0.024, 0.03, 0.027, 0.038, 0.045];
-
-  return wiggle.map((offset, index) => {
-    const t = index / (wiggle.length - 1);
-    return base + (target - base) * t + base * offset;
-  });
 }
 
 export function Sparkline({

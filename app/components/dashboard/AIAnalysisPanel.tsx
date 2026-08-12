@@ -1,3 +1,4 @@
+import { ANALYSIS_MODEL_LABEL, ANALYSIS_PROVIDER } from "@/app/lib/analysis-model";
 import { INSTRUMENT_TYPES, type InstrumentType, type MonthlyAnalysis } from "@/core/types";
 import AllocationDiff from "./AllocationDiff";
 import BulletColumn from "./BulletColumn";
@@ -56,7 +57,9 @@ export default function AIAnalysisPanel({
         <div className="flex flex-wrap items-center gap-3.5">
           <ConfidenceLadder level={latestAnalysis?.confidence} />
           <div className="border-l border-[var(--hairline)] pl-3.5 font-mono text-[10px] leading-4 text-[var(--muted)]">
-            <div>OpenAI · gpt-5</div>
+            <div>
+              {ANALYSIS_PROVIDER} · {ANALYSIS_MODEL_LABEL}
+            </div>
             <div>último · {runAt}</div>
           </div>
           <button

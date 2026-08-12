@@ -1,18 +1,16 @@
+"use client";
+
+import { usePathname } from "next/navigation";
 import type { MarketSnapshot } from "@/core/types";
+import { NAV_ITEMS } from "./nav";
 
 type SidebarProps = {
   activeSnapshot?: MarketSnapshot;
   onSignOut: () => Promise<void>;
 };
 
-const nav = [
-  { label: "Resumen", icon: "◐", href: "/", active: true },
-  { label: "Vencimientos", icon: "◷", href: "/vencimientos" },
-  { label: "Análisis", icon: "✦", href: "/analisis" },
-  { label: "Fiscal", icon: "§", href: "/fiscal" },
-];
-
 export default function Sidebar({ activeSnapshot, onSignOut }: SidebarProps) {
+  const pathname = usePathname();
   const fetchedAt = activeSnapshot?.fetchedAt
     ? new Intl.DateTimeFormat("es-MX", {
         day: "2-digit",
@@ -35,26 +33,31 @@ export default function Sidebar({ activeSnapshot, onSignOut }: SidebarProps) {
       </div>
 
       <nav className="mt-8 grid gap-1.5">
-        {nav.map((item) => (
-          <a
-            className={`group flex items-center gap-3 rounded-xl px-2.5 py-2 text-[12px] transition hover:bg-white/[0.08] ${
-              item.active ? "bg-white/[0.06] text-[var(--foreground)]" : "text-[var(--text-soft)]"
-            }`}
-            href={item.href}
-            key={item.label}
-          >
-            <span
-              className={`flex h-[22px] w-[22px] items-center justify-center rounded-md border border-[var(--hairline)] text-[12px] ${
-                item.active
-                  ? "bg-gradient-to-br from-[var(--bonos)] to-[var(--cetes)] text-[var(--background)] shadow-[0_0_8px_rgba(103,232,200,0.5)]"
-                  : "bg-white/[0.035] text-[var(--muted)] group-hover:text-[var(--foreground)]"
+        {NAV_ITEMS.map((item) => {
+          const isActive = pathname === item.href;
+
+          return (
+            <a
+              aria-current={isActive ? "page" : undefined}
+              className={`group flex items-center gap-3 rounded-xl px-2.5 py-2 text-[12px] transition hover:bg-white/[0.08] ${
+                isActive ? "bg-white/[0.06] text-[var(--foreground)]" : "text-[var(--text-soft)]"
               }`}
+              href={item.href}
+              key={item.label}
             >
-              {item.icon}
-            </span>
-            <span>{item.label}</span>
-          </a>
-        ))}
+              <span
+                className={`flex h-[22px] w-[22px] items-center justify-center rounded-md border border-[var(--hairline)] text-[12px] ${
+                  isActive
+                    ? "bg-gradient-to-br from-[var(--bonos)] to-[var(--cetes)] text-[var(--background)] shadow-[0_0_8px_rgba(103,232,200,0.5)]"
+                    : "bg-white/[0.035] text-[var(--muted)] group-hover:text-[var(--foreground)]"
+                }`}
+              >
+                {item.icon}
+              </span>
+              <span>{item.label}</span>
+            </a>
+          );
+        })}
       </nav>
 
       <div className="mt-auto rounded-2xl border border-[var(--hairline)] bg-white/[0.04] p-3.5">

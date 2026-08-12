@@ -20,7 +20,7 @@ export default function UpcomingMaturities({ lots }: UpcomingMaturitiesProps) {
     <section className="flex min-h-[174px] flex-col gap-2.5 rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] px-5 py-[18px] backdrop-blur-2xl">
       <div className="flex items-center justify-between">
         <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Próximos vencimientos</p>
-        <span className="font-mono text-[10px] text-[var(--bonos)]">+{extra}</span>
+        {extra > 0 ? <span className="font-mono text-[10px] text-[var(--bonos)]">+{extra}</span> : null}
       </div>
 
       <div className="grid flex-1 gap-1.5 overflow-hidden">
@@ -43,8 +43,7 @@ export default function UpcomingMaturities({ lots }: UpcomingMaturitiesProps) {
 }
 
 function MaturityRow({ lot }: { lot: InvestmentLot & { maturityDate: string } }) {
-  const daysLeft = daysUntil(lot.maturityDate);
-  const progress = Math.max(4, Math.min(100, (daysLeft / 3650) * 100));
+  const progress = elapsedProgress(lot);
   const color = colors[lot.instrument];
 
   return (
@@ -56,7 +55,11 @@ function MaturityRow({ lot }: { lot: InvestmentLot & { maturityDate: string } })
           <span className="font-mono text-[10px] text-[var(--foreground)]">{formatCurrency(lot.amount)}</span>
         </div>
         <div className="mt-1 flex items-center gap-2">
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
+          <div
+            aria-label={`${progress.toFixed(0)}% del plazo transcurrido`}
+            className="h-1 flex-1 overflow-hidden rounded-full bg-white/[0.08]"
+            role="img"
+          >
             <div className="h-full rounded-full" style={{ background: color, width: `${progress}%` }} />
           </div>
           <span className="font-mono text-[9px] text-[var(--muted)]">{formatDate(lot.maturityDate)}</span>
@@ -66,8 +69,13 @@ function MaturityRow({ lot }: { lot: InvestmentLot & { maturityDate: string } })
   );
 }
 
-function daysUntil(date: string) {
-  return Math.max(0, Math.ceil((new Date(date).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+/** Fracción del plazo ya transcurrida: la barra se llena conforme se acerca el vencimiento. */
+function elapsedProgress(lot: InvestmentLot & { maturityDate: string }) {
+  const start = new Date(lot.date ?? `${lot.month}-01`).getTime();
+  const end = new Date(lot.maturityDate).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 100;
+
+  return Math.max(2, Math.min(100, ((Date.now() - start) / (end - start)) * 100));
 }
 
 function formatDate(date: string) {

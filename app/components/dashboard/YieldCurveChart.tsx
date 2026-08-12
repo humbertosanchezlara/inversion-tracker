@@ -30,6 +30,7 @@ export default function YieldCurveChart({ quotes }: YieldCurveChartProps) {
   const data = buildCurveData(quotes);
   const maxByInstrument = order.map((instrument) => findMaxQuote(quotes, instrument));
   const spread = calculateBonosSpread(quotes);
+  const rateAxis = buildRateAxis(quotes);
 
   return (
     <section className="grid min-h-[420px] gap-4 rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] p-5 backdrop-blur-2xl xl:grid-cols-[1fr_280px]">
@@ -65,10 +66,10 @@ export default function YieldCurveChart({ quotes }: YieldCurveChartProps) {
                   type="number"
                 />
                 <YAxis
-                  domain={[0.04, 0.105]}
+                  domain={rateAxis.domain}
                   tick={{ fill: chartTheme.axisTick, fontFamily: chartTheme.fontMono, fontSize: 10 }}
                   tickFormatter={(value) => `${(Number(value) * 100).toFixed(0)}%`}
-                  ticks={[0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1]}
+                  ticks={rateAxis.ticks}
                   width={44}
                 />
                 <Tooltip
@@ -149,6 +150,33 @@ function buildCurveData(quotes: MarketInstrumentQuote[]) {
   }
 
   return Array.from(byTerm.values()).sort((a, b) => a.termYears - b.termYears);
+}
+
+const FALLBACK_RATE_AXIS = { domain: [0.04, 0.1] as [number, number], ticks: [0.04, 0.06, 0.08, 0.1] };
+
+/**
+ * Las tasas van desde UDIBONOS reales (~4%) hasta BONOS largos (~10%), así que el eje
+ * se deriva del snapshot: un dominio fijo recortaba las series de la parte baja.
+ */
+function buildRateAxis(quotes: MarketInstrumentQuote[]) {
+  const rates = quotes.map((quote) => quote.annualRate).filter((rate) => Number.isFinite(rate));
+  if (rates.length === 0) return FALLBACK_RATE_AXIS;
+
+  const step = Math.max(...rates) - Math.min(...rates) > 0.08 ? 0.02 : 0.01;
+  const lower = Math.max(0, roundToStep(Math.min(...rates) - step / 2, step, "floor"));
+  const upper = roundToStep(Math.max(...rates) + step / 2, step, "ceil");
+  const ticks: number[] = [];
+
+  for (let tick = lower; tick <= upper + step / 2; tick += step) {
+    ticks.push(Number(tick.toFixed(4)));
+  }
+
+  return { domain: [lower, upper] as [number, number], ticks };
+}
+
+function roundToStep(value: number, step: number, mode: "floor" | "ceil") {
+  const steps = mode === "floor" ? Math.floor(value / step) : Math.ceil(value / step);
+  return Number((steps * step).toFixed(4));
 }
 
 function normalizeTermYears(quote: MarketInstrumentQuote) {

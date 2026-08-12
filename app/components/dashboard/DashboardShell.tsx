@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, type Dispatch, type SetStateAction } from "react";
+import { usePathname } from "next/navigation";
 import { INSTRUMENT_LABELS, INSTRUMENT_TYPES } from "@/core/types";
+import { NAV_ITEMS } from "./nav";
 import { addYearsIsoDate, formatIsoDate } from "@/core/dates";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
@@ -72,6 +74,7 @@ export type DashboardShellProps = {
   totalInvested: number;
   updateMonth: (nextMonth: string) => void;
   upcomingMaturities: Array<InvestmentLot & { maturityDate: string }>;
+  userName?: string;
 };
 
 export default function DashboardShell(props: DashboardShellProps) {
@@ -79,6 +82,7 @@ export default function DashboardShell(props: DashboardShellProps) {
   const currentValue = estimateCurrentValue(props.lots);
   const currentAllocation = calculateAllocation(props.lots, props.totalInvested);
   const previousSnapshot = findPreviousSnapshot(props.snapshots, props.activeSnapshot);
+  const valueSeries = buildValueSeries(props.lots);
   const instruments = INSTRUMENT_TYPES.map((instrument) => {
     const activeQuote = quote(props.activeSnapshot, instrument);
     const previousQuote = quote(previousSnapshot, instrument, activeQuote?.termYears);
@@ -90,10 +94,11 @@ export default function DashboardShell(props: DashboardShellProps) {
       changeBps:
         typeof activeQuote?.annualRate === "number" && typeof previousQuote?.annualRate === "number"
           ? (activeQuote.annualRate - previousQuote.annualRate) * 10000
-          : 0,
+          : undefined,
       instrument,
       invested,
       quote: activeQuote,
+      rateHistory: buildRateHistory(props.snapshots, instrument, activeQuote?.termYears),
     };
   });
 
@@ -108,6 +113,7 @@ export default function DashboardShell(props: DashboardShellProps) {
             month={props.month}
             onOpenRegister={() => setIsRegisterOpen(true)}
             onRefreshMarketData={props.refreshMarketData}
+            userName={props.userName}
           />
           <MobileNav />
           {props.message ? (
@@ -127,6 +133,7 @@ export default function DashboardShell(props: DashboardShellProps) {
               lotsCount={props.lots.length}
               onOpenRegister={() => setIsRegisterOpen(true)}
               totalInvested={props.totalInvested}
+              valueSeries={valueSeries}
             />
             <div className="grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
               {instruments.map((item) => (
@@ -136,6 +143,7 @@ export default function DashboardShell(props: DashboardShellProps) {
                   invested={item.invested}
                   key={item.instrument}
                   quote={item.quote}
+                  rateHistory={item.rateHistory}
                 />
               ))}
             </div>
@@ -190,25 +198,27 @@ export default function DashboardShell(props: DashboardShellProps) {
 }
 
 function MobileNav() {
-  const nav = [
-    { label: "Resumen", icon: "◐", href: "/" },
-    { label: "Vencimientos", icon: "◷", href: "/vencimientos" },
-    { label: "Análisis", icon: "✦", href: "/analisis" },
-    { label: "Fiscal", icon: "§", href: "/fiscal" },
-  ];
+  const pathname = usePathname();
 
   return (
     <nav className="grid grid-cols-4 gap-1 rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] p-1 backdrop-blur-2xl lg:hidden">
-      {nav.map((item) => (
-        <a
-          className="flex min-h-10 flex-col items-center justify-center gap-1 rounded-xl text-[10px] text-[var(--text-soft)] first:bg-white/[0.06] first:text-[var(--foreground)]"
-          href={item.href}
-          key={item.label}
-        >
-          <span className="font-mono text-[13px]">{item.icon}</span>
-          <span className="truncate">{item.label}</span>
-        </a>
-      ))}
+      {NAV_ITEMS.map((item) => {
+        const isActive = pathname === item.href;
+
+        return (
+          <a
+            aria-current={isActive ? "page" : undefined}
+            className={`flex min-h-10 flex-col items-center justify-center gap-1 rounded-xl text-[10px] ${
+              isActive ? "bg-white/[0.06] text-[var(--foreground)]" : "text-[var(--text-soft)]"
+            }`}
+            href={item.href}
+            key={item.label}
+          >
+            <span className="font-mono text-[13px]">{item.icon}</span>
+            <span className="truncate">{item.label}</span>
+          </a>
+        );
+      })}
     </nav>
   );
 }
@@ -339,17 +349,49 @@ function findPreviousSnapshot(snapshots: MarketSnapshot[], activeSnapshot?: Mark
     .find((snapshot) => snapshot.fetchedAt <= activeSnapshot.fetchedAt);
 }
 
+function accruedValue(lot: InvestmentLot, asOf: number) {
+  const startDate = new Date(lot.date ?? lot.createdAt).getTime();
+  const maturityDate = lot.maturityDate ? new Date(lot.maturityDate).getTime() : asOf;
+  const endDate = Math.min(asOf, Number.isFinite(maturityDate) ? maturityDate : asOf);
+  const elapsedYears = Math.max(0, (endDate - startDate) / (365.25 * 24 * 60 * 60 * 1000));
+
+  return lot.amount * (1 + lot.annualRate) ** elapsedYears;
+}
+
 function estimateCurrentValue(lots: InvestmentLot[]) {
   const now = Date.now();
+  return lots.reduce((sum, lot) => sum + accruedValue(lot, now), 0);
+}
 
-  return lots.reduce((sum, lot) => {
-    const startDate = new Date(lot.date ?? lot.createdAt).getTime();
-    const maturityDate = lot.maturityDate ? new Date(lot.maturityDate).getTime() : now;
-    const endDate = Math.min(now, Number.isFinite(maturityDate) ? maturityDate : now);
-    const elapsedYears = Math.max(0, (endDate - startDate) / (365.25 * 24 * 60 * 60 * 1000));
+/** Valor devengado de la cartera al cierre de cada mes con lotes registrados. */
+function buildValueSeries(lots: InvestmentLot[]) {
+  const months = Array.from(new Set(lots.map((lot) => lot.month))).sort();
+  if (months.length === 0) return [];
+  const now = Date.now();
 
-    return sum + lot.amount * (1 + lot.annualRate) ** elapsedYears;
-  }, 0);
+  const series = months.map((month) => {
+    const asOf = Math.min(now, endOfMonthTime(month));
+    return lots
+      .filter((lot) => lot.month <= month)
+      .reduce((sum, lot) => sum + accruedValue(lot, asOf), 0);
+  });
+
+  return [0, ...series];
+}
+
+function endOfMonthTime(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Date(year, monthNumber, 0, 23, 59, 59).getTime();
+}
+
+/** Tasas del mismo instrumento/plazo a lo largo de los snapshots guardados. */
+function buildRateHistory(snapshots: MarketSnapshot[], instrument: InstrumentType, termYears?: number) {
+  return snapshots
+    .filter((snapshot) => snapshot.quotes.length > 0)
+    .sort((a, b) => a.fetchedAt.localeCompare(b.fetchedAt))
+    .map((snapshot) => quote(snapshot, instrument, termYears)?.annualRate)
+    .filter((rate): rate is number => typeof rate === "number")
+    .slice(-10);
 }
 
 function BackgroundMesh() {

@@ -3,6 +3,7 @@ type TopBarProps = {
   month: string;
   onOpenRegister: () => void;
   onRefreshMarketData: () => Promise<void>;
+  userName?: string;
 };
 
 function formatMonthLabel(month: string) {
@@ -10,14 +11,20 @@ function formatMonthLabel(month: string) {
   return new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric" }).format(date).toUpperCase();
 }
 
-export default function TopBar({ busy, month, onOpenRegister, onRefreshMarketData }: TopBarProps) {
+function greeting(hour: number) {
+  if (hour < 12) return "Buenos días";
+  if (hour < 19) return "Buenas tardes";
+  return "Buenas noches";
+}
+
+export default function TopBar({ busy, month, onOpenRegister, onRefreshMarketData, userName }: TopBarProps) {
+  const salute = `${greeting(new Date().getHours())}${userName ? `, ${userName}` : ""}`;
+
   return (
     <header className="flex min-h-[58px] flex-col justify-between gap-3 rounded-2xl border border-[var(--hairline)] bg-[var(--panel-bg)] px-4 py-3 backdrop-blur-2xl md:flex-row md:items-center md:px-5">
       <div>
         <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">{formatMonthLabel(month)}</p>
-        <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.015em] text-[var(--foreground)]">
-          Buenos días, Humberto
-        </h2>
+        <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.015em] text-[var(--foreground)]">{salute}</h2>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

@@ -117,6 +117,14 @@ function normalizeLot(lot: InvestmentLot): InvestmentLot {
   };
 }
 
+function displayName(email?: string) {
+  const localPart = email?.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  if (!localPart) return undefined;
+
+  const firstName = localPart.split(" ")[0];
+  return firstName.charAt(0).toUpperCase() + firstName.slice(1);
+}
+
 function readableError(error: unknown) {
   if (error instanceof Error) return error.message;
   if (typeof error === "object" && error && "message" in error) {
@@ -600,7 +608,7 @@ export default function TrackerApp() {
             />
           </label>
           <button
-            className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md bg-[var(--accent)] px-4 text-sm font-semibold text-white"
+            className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--background)]"
             onClick={signIn}
             disabled={busy === "auth" || !email}
           >
@@ -658,6 +666,7 @@ export default function TrackerApp() {
       totalInvested={totalInvested}
       updateMonth={updateMonth}
       upcomingMaturities={upcomingMaturities}
+      userName={displayName(session.user.email)}
     />
   );
 }

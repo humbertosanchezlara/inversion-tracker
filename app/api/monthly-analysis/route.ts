@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { randomUUID } from "node:crypto";
+import { DEFAULT_ANALYSIS_MODEL } from "@/app/lib/analysis-model";
 import type { InstrumentType, InvestmentLot, MarketSnapshot, MonthlyAnalysis, TaxDeclarationRecord } from "@/core/types";
 
 type Body = {
@@ -110,7 +111,7 @@ export async function POST(request: Request) {
   let response;
   try {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const model = process.env.OPENAI_MODEL || "gpt-5";
+    const model = process.env.OPENAI_MODEL || DEFAULT_ANALYSIS_MODEL;
     response = await client.responses.create({
       model,
       reasoning: { effort: "low" },
