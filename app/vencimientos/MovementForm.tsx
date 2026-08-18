@@ -32,8 +32,9 @@ export default function MovementForm({ existingMonths, onClose, onSaved, userId 
   const [occurredAt, setOccurredAt] = useState("");
   const [asset, setAsset] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [unitPriceMxn, setUnitPriceMxn] = useState("");
-  const [amountMxn, setAmountMxn] = useState("");
+  const [unitPrice, setUnitPrice] = useState("");
+  const [amount, setAmount] = useState("");
+  const [quoteCurrency, setQuoteCurrency] = useState("MXN");
   const [feeAmount, setFeeAmount] = useState("");
   const [feeAsset, setFeeAsset] = useState("");
   const [venue, setVenue] = useState("");
@@ -44,7 +45,7 @@ export default function MovementForm({ existingMonths, onClose, onSaved, userId 
   const isNoActivity = kind === "NONE";
   const derivedTotal = (() => {
     const q = optionalNumber(quantity);
-    const p = optionalNumber(unitPriceMxn);
+    const p = optionalNumber(unitPrice);
     return typeof q === "number" && typeof p === "number" ? q * p : undefined;
   })();
 
@@ -66,10 +67,16 @@ export default function MovementForm({ existingMonths, onClose, onSaved, userId 
       return;
     }
 
+    if (!isNoActivity && !/^[A-Za-z]{3,5}$/.test(quoteCurrency.trim())) {
+      setError("La moneda de liquidación debe ser un código como MXN o USD.");
+      return;
+    }
+
     const movement: AssetMovement = {
       id: newId(),
       month,
       kind,
+      quoteCurrency: quoteCurrency.trim().toUpperCase() || "MXN",
       createdAt: new Date().toISOString(),
       ...(isNoActivity
         ? {}
@@ -77,8 +84,8 @@ export default function MovementForm({ existingMonths, onClose, onSaved, userId 
             occurredAt: occurredAt ? new Date(occurredAt).toISOString() : undefined,
             asset: asset.trim().toUpperCase(),
             quantity: optionalNumber(quantity),
-            unitPriceMxn: optionalNumber(unitPriceMxn),
-            amountMxn: optionalNumber(amountMxn) ?? derivedTotal,
+            unitPrice: optionalNumber(unitPrice),
+            amount: optionalNumber(amount) ?? derivedTotal,
             feeAmount: optionalNumber(feeAmount),
             feeAsset: feeAsset.trim().toUpperCase() || undefined,
             venue: venue.trim() || undefined,
@@ -181,34 +188,46 @@ export default function MovementForm({ existingMonths, onClose, onSaved, userId 
                   />
                 </label>
                 <label className={labelClass}>
-                  Precio unitario MXN
+                  Precio unitario
                   <input
                     className={inputClass}
-                    onChange={(event) => setUnitPriceMxn(event.target.value)}
+                    onChange={(event) => setUnitPrice(event.target.value)}
                     placeholder="17.21"
                     step="any"
                     type="number"
-                    value={unitPriceMxn}
+                    value={unitPrice}
                   />
                 </label>
               </div>
 
-              <label className={labelClass}>
-                Total MXN
-                <input
-                  className={inputClass}
-                  onChange={(event) => setAmountMxn(event.target.value)}
-                  placeholder={derivedTotal ? derivedTotal.toFixed(2) : "10011.69"}
-                  step="any"
-                  type="number"
-                  value={amountMxn}
-                />
-                {derivedTotal && !amountMxn ? (
-                  <span className="font-mono text-[10px] text-[var(--muted)]">
-                    Si lo dejas vacío se guarda {derivedTotal.toFixed(2)} (cantidad × precio).
-                  </span>
-                ) : null}
-              </label>
+              <div className="grid gap-3 sm:grid-cols-[1fr_110px]">
+                <label className={labelClass}>
+                  Total
+                  <input
+                    className={inputClass}
+                    onChange={(event) => setAmount(event.target.value)}
+                    placeholder={derivedTotal ? derivedTotal.toFixed(2) : "10011.69"}
+                    step="any"
+                    type="number"
+                    value={amount}
+                  />
+                </label>
+                <label className={labelClass}>
+                  Moneda
+                  <input
+                    className={inputClass}
+                    onChange={(event) => setQuoteCurrency(event.target.value)}
+                    placeholder="MXN"
+                    value={quoteCurrency}
+                  />
+                </label>
+              </div>
+              {derivedTotal && !amount ? (
+                <span className="-mt-2 font-mono text-[10px] text-[var(--muted)]">
+                  Si dejas el total vacío se guarda {derivedTotal.toFixed(2)} {quoteCurrency.toUpperCase()} (cantidad ×
+                  precio).
+                </span>
+              ) : null}
 
               <div className="grid gap-3 sm:grid-cols-[1fr_110px]">
                 <label className={labelClass}>

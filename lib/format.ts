@@ -10,10 +10,10 @@ export function formatCurrency(value: number) {
  * Para movimientos de activos, donde redondear a pesos enteros pierde información:
  * un total de 10,011.69 o un precio unitario de 17.21 deben leerse exactos.
  */
-export function formatCurrencyPrecise(value: number, maximumFractionDigits = 2) {
+export function formatCurrencyPrecise(value: number, currency = "MXN", maximumFractionDigits = 2) {
   return new Intl.NumberFormat("es-MX", {
     style: "currency",
-    currency: "MXN",
+    currency,
     minimumFractionDigits: 2,
     maximumFractionDigits,
   }).format(value);

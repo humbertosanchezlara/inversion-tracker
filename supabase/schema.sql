@@ -132,8 +132,9 @@ create table if not exists public.asset_movements (
   kind text not null check (kind in ('DEPOSIT', 'BUY', 'SELL', 'WITHDRAWAL', 'NONE')),
   asset text,
   quantity numeric(28, 8) check (quantity >= 0),
-  unit_price_mxn numeric(20, 6) check (unit_price_mxn >= 0),
-  amount_mxn numeric(18, 2) check (amount_mxn >= 0),
+  unit_price numeric(20, 6) check (unit_price >= 0),
+  amount numeric(18, 2) check (amount >= 0),
+  quote_currency text not null default 'MXN',
   fee_amount numeric(28, 8) check (fee_amount >= 0),
   fee_asset text,
   venue text,
@@ -142,7 +143,9 @@ create table if not exists public.asset_movements (
   constraint asset_movements_asset_required_unless_none
     check (kind = 'NONE' or asset is not null),
   constraint asset_movements_none_stays_empty
-    check (kind <> 'NONE' or (occurred_at is null and asset is null and quantity is null and amount_mxn is null))
+    check (kind <> 'NONE' or (occurred_at is null and asset is null and quantity is null and amount is null)),
+  constraint asset_movements_quote_currency_format
+    check (quote_currency ~ '^[A-Z]{3,5}$')
 );
 
 alter table public.asset_movements enable row level security;

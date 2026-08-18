@@ -56,8 +56,10 @@ export type AssetMovement = {
   kind: AssetMovementKind;
   asset?: string;
   quantity?: number;
-  unitPriceMxn?: number;
-  amountMxn?: number;
+  unitPrice?: number;
+  amount?: number;
+  /** Moneda en que se liquidó el movimiento: MXN, USD, etc. */
+  quoteCurrency: string;
   feeAmount?: number;
   feeAsset?: string;
   venue?: string;

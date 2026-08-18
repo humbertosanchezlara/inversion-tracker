@@ -110,8 +110,8 @@ export default function VencimientosPage() {
 
           {status === "ready" && !movementsAvailable ? (
             <div className="rounded-2xl border border-[rgba(245,193,108,0.35)] bg-[rgba(245,193,108,0.10)] px-4 py-3 text-[12px] leading-5 text-[var(--udibonos)] backdrop-blur-2xl">
-              Falta correr la migración <span className="font-mono">supabase/20260812_add_asset_movements.sql</span>.
-              Hasta entonces no se pueden guardar movimientos fuera de instrumentos gubernamentales.
+              Faltan migraciones de <span className="font-mono">supabase/</span>. Hasta correrlas no se pueden
+              guardar movimientos fuera de instrumentos gubernamentales.
             </div>
           ) : null}
 
@@ -390,18 +390,18 @@ function MovementRow({
         {typeof movement.quantity === "number" ? (
           <span className="font-mono text-[11px] text-[var(--text-soft)]">{formatQuantity(movement.quantity)}</span>
         ) : null}
-        {typeof movement.amountMxn === "number" ? (
+        {typeof movement.amount === "number" ? (
           <span className="ml-auto font-mono text-[11px] text-[var(--foreground)]">
             {outgoing ? "−" : "+"}
-            {formatCurrencyPrecise(movement.amountMxn)}
+            {formatCurrencyPrecise(movement.amount, movement.quoteCurrency)}
           </span>
         ) : null}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[9.5px] text-[var(--muted)]">
         {movement.occurredAt ? <span>{formatTimestamp(movement.occurredAt)}</span> : null}
-        {typeof movement.unitPriceMxn === "number" ? (
+        {typeof movement.unitPrice === "number" ? (
           <span>
-            1 {movement.asset} = {formatCurrencyPrecise(movement.unitPriceMxn, 8)}
+            1 {movement.asset} = {formatCurrencyPrecise(movement.unitPrice, movement.quoteCurrency, 8)}
           </span>
         ) : null}
         {typeof movement.feeAmount === "number" ? (
